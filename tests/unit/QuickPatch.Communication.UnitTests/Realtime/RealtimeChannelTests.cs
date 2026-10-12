@@ -11,7 +11,7 @@ using Microsoft.Extensions.DependencyInjection;
 using QuickPatch.Communication.Api.Realtime;
 using QuickPatch.Communication.Application.Realtime;
 
-namespace QuickPatch.Communication.IntegrationTests;
+namespace QuickPatch.Communication.UnitTests.Realtime;
 
 /// <summary>
 /// Pruebas del canal <c>/v1/realtime</c> con un cliente WebSocket real contra el servicio en memoria, según
