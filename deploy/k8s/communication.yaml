@@ -1,0 +1,94 @@
+# Despliegue de Communication en k3s (namespace quickpatch), igual en QA y producción.
+# Primer despliegue: crear el Secret communication-secretos (deploy/k8s/README.md), reemplazar <vm-mensajeria> por la IP de
+# Kafka del ambiente y aplicar este archivo con `kubectl apply -f deploy/k8s/communication.yaml`.
+# Después, el pipeline actualiza la imagen con `kubectl set image deployment/communication "*=<imagen>"`.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: communication-config
+  namespace: quickpatch
+  labels: { app: communication }
+data:
+  Jwt__Issuer: "quickpatch-identity"
+  Jwt__Audience: "quickpatch"
+  Kafka__BootstrapServers: "<vm-mensajeria>:9092"
+  Kafka__ConsumerGroupId: "communication-service"
+  Realtime__AuthTimeoutSeconds: "10"
+  Realtime__MaxFrameBytes: "8192"
+  Realtime__KeepAliveSeconds: "30"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: communication
+  namespace: quickpatch
+  labels: { app: communication }
+spec:
+  # Una réplica: las conexiones del canal en tiempo real viven en memoria (ADR-023, punto 6). Con más réplicas cada
+  # una tendría que recibir todos los eventos (grupos de consumidores distintos) o repartirlos con Redis pub/sub.
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels: { app: communication }
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  template:
+    metadata:
+      labels: { app: communication }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        # La imagen declara USER app (por nombre); Kubernetes necesita el UID para verificar que no es root.
+        runAsUser: 1654
+        runAsGroup: 1654
+      # Al detenerse, el servicio cierra los WebSocket con 1001 para que las apps se reconecten al pod nuevo.
+      terminationGracePeriodSeconds: 20
+      containers:
+        - name: communication
+          image: ghcr.io/arqui-202630/quickpatch-communication:pendiente
+          ports:
+            - { name: http, containerPort: 8080 }
+          envFrom:
+            - configMapRef: { name: communication-config }
+          env:
+            - name: Jwt__PublicKeyPem
+              valueFrom: { secretKeyRef: { name: communication-secretos, key: jwt-public-key } }
+          readinessProbe:
+            httpGet: { path: /health/ready, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /health/live, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          # Pendiente de medición (Documento de Infraestructura, 5.6); límite inicial dentro del presupuesto de VM3.
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: communication
+  namespace: quickpatch
+  labels: { app: communication }
+spec:
+  selector: { app: communication }
+  ports:
+    - { name: http, port: 8080, targetPort: http }
+---
+# El gateway quita /api y reenvía a Traefik (NodePort 30080); Traefik elige el servicio por la ruta del contrato y
+# admite WebSocket sin configuración adicional (ADR-023). Los tiempos de las conexiones largas se ajustan en el Nginx
+# de VM1 (proxy_read_timeout), no aquí.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: communication
+  namespace: quickpatch
+spec:
+  rules:
+    - http:
+        paths:
+          - { path: /v1/realtime, pathType: Exact, backend: { service: { name: communication, port: { name: http } } } }
