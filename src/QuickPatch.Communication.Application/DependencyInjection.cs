@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 
+using QuickPatch.Communication.Application.Realtime;
+
 namespace QuickPatch.Communication.Application;
 
 /// <summary>
@@ -10,6 +12,8 @@ public static class DependencyInjection
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
+        services.AddSingleton<RecentEventIds>();
+        services.AddSingleton<RealtimeNotifier>();
         return services;
     }
 }

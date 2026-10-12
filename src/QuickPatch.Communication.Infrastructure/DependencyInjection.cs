@@ -1,5 +1,9 @@
+using Confluent.Kafka;
+
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+
+using QuickPatch.Communication.Infrastructure.Messaging;
 
 namespace QuickPatch.Communication.Infrastructure;
 
@@ -13,6 +17,21 @@ public static class DependencyInjection
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
+
+        var kafka = configuration.GetSection(KafkaOptions.Section).Get<KafkaOptions>() ?? new KafkaOptions();
+        if (kafka.Enabled)
+        {
+            services.AddSingleton(_ => new ConsumerBuilder<string, string>(new ConsumerConfig
+            {
+                BootstrapServers = kafka.BootstrapServers,
+                GroupId = kafka.ConsumerGroupId,
+                EnableAutoCommit = false,
+                // Las conexiones viven en memoria: al arrancar no tiene sentido avisar de eventos viejos.
+                AutoOffsetReset = AutoOffsetReset.Latest,
+            }).Build());
+            services.AddHostedService<RealtimeEventsConsumer>();
+        }
+
         return services;
     }
 }
