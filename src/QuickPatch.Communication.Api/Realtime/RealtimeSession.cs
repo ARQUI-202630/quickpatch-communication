@@ -22,6 +22,9 @@ public sealed partial class RealtimeSession(
     TimeProvider time,
     ILogger<RealtimeSession> logger)
 {
+    /// <summary>Cuánto se espera la trama de cierre de la app después de cerrar por un plazo.</summary>
+    internal static readonly TimeSpan CloseReplyTimeout = TimeSpan.FromSeconds(5);
+
     private enum FrameKind
     {
         Text,
@@ -35,23 +38,18 @@ public sealed partial class RealtimeSession(
         ArgumentNullException.ThrowIfNull(socket);
         var settings = options.Value;
 
-        // 1. Primera trama, con plazo.
-        (FrameKind Kind, string? Text) first;
-        using (var authTimeout = CancellationTokenSource.CreateLinkedTokenSource(aborted))
+        // 1. Primera trama, con plazo. El plazo no cancela la lectura: en Kestrel, cancelar ReceiveAsync aborta el socket
+        // y la app recibiría un cierre sin código en lugar de 4002 (SCRUM-469).
+        var firstRead = ReadFrameAsync(socket, settings.MaxFrameBytes, aborted);
+        if (!await CompletesWithinAsync(firstRead, TimeSpan.FromSeconds(settings.AuthTimeoutSeconds), aborted).ConfigureAwait(false))
         {
-            authTimeout.CancelAfter(TimeSpan.FromSeconds(settings.AuthTimeoutSeconds));
-            try
-            {
-                first = await ReadFrameAsync(socket, settings.MaxFrameBytes, authTimeout.Token).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (!aborted.IsCancellationRequested)
-            {
-                await CloseQuietlyAsync(socket, CloseCodes.NoAuthentication, "sin-autenticacion", aborted).ConfigureAwait(false);
-                LogClosed(logger, CloseCodes.NoAuthentication);
-                return;
-            }
+            await CloseQuietlyAsync(socket, CloseCodes.NoAuthentication, "sin-autenticacion", aborted).ConfigureAwait(false);
+            LogClosed(logger, CloseCodes.NoAuthentication);
+            await AwaitCloseReplyAsync(firstRead).ConfigureAwait(false);
+            return;
         }
 
+        var first = await firstRead.ConfigureAwait(false);
         if (first.Kind == FrameKind.Closed)
         {
             return;
@@ -100,23 +98,22 @@ public sealed partial class RealtimeSession(
         LogOpened(logger, user.UserId, user.TenantId, user.Role);
         try
         {
-            using var untilExpiry = CancellationTokenSource.CreateLinkedTokenSource(aborted);
             var remaining = user.ExpiresAt - time.GetUtcNow();
-            untilExpiry.CancelAfter(remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero);
-            try
-            {
-                var next = await ReadFrameAsync(socket, settings.MaxFrameBytes, untilExpiry.Token).ConfigureAwait(false);
-                if (next.Kind != FrameKind.Closed)
-                {
-                    // El contrato solo admite la trama auth: cualquier otra trama de la app es un error.
-                    await client.CloseAsync(CloseCodes.InvalidFrame, "trama-invalida", aborted).ConfigureAwait(false);
-                    LogClosed(logger, CloseCodes.InvalidFrame);
-                }
-            }
-            catch (OperationCanceledException) when (!aborted.IsCancellationRequested)
+            var nextRead = ReadFrameAsync(socket, settings.MaxFrameBytes, aborted);
+            if (!await CompletesWithinAsync(nextRead, remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero, aborted).ConfigureAwait(false))
             {
                 await client.CloseAsync(CloseCodes.TokenExpired, "token-vencido", aborted).ConfigureAwait(false);
                 LogClosed(logger, CloseCodes.TokenExpired);
+                await AwaitCloseReplyAsync(nextRead).ConfigureAwait(false);
+                return;
+            }
+
+            var next = await nextRead.ConfigureAwait(false);
+            if (next.Kind != FrameKind.Closed)
+            {
+                // El contrato solo admite la trama auth: cualquier otra trama de la app es un error.
+                await client.CloseAsync(CloseCodes.InvalidFrame, "trama-invalida", aborted).ConfigureAwait(false);
+                LogClosed(logger, CloseCodes.InvalidFrame);
             }
         }
         catch (WebSocketException)
@@ -126,6 +123,36 @@ public sealed partial class RealtimeSession(
         finally
         {
             registry.Remove(client.ConnectionId);
+        }
+    }
+
+    /// <summary>
+    /// Espera la lectura hasta el plazo sin cancelarla. Devuelve false si el plazo venció primero; la lectura sigue en
+    /// curso y recibe la respuesta de la app al cierre. Si la petición se abortó, devuelve true para que la lectura
+    /// propague el error como antes.
+    /// </summary>
+    private async Task<bool> CompletesWithinAsync(Task read, TimeSpan deadline, CancellationToken aborted)
+    {
+        using var timer = CancellationTokenSource.CreateLinkedTokenSource(aborted);
+        var delay = Task.Delay(deadline, time, timer.Token);
+        var winner = await Task.WhenAny(read, delay).ConfigureAwait(false);
+        await timer.CancelAsync().ConfigureAwait(false);
+        return winner == read || aborted.IsCancellationRequested;
+    }
+
+    /// <summary>
+    /// Tras enviar el cierre, espera la trama de cierre de la app un tiempo acotado. Si la app no responde, el socket se
+    /// libera al terminar la petición y la lectura pendiente falla; ese error se observa aquí para que no quede suelto.
+    /// </summary>
+    private async Task AwaitCloseReplyAsync(Task read)
+    {
+        try
+        {
+            await read.WaitAsync(CloseReplyTimeout, time).ConfigureAwait(false);
+        }
+        catch (Exception e) when (e is TimeoutException or WebSocketException or OperationCanceledException)
+        {
+            _ = read.ContinueWith(static t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
         }
     }
 
