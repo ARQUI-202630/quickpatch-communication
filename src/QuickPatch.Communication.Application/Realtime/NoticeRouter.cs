@@ -15,11 +15,7 @@ public static class NoticeRouter
 {
     public static IReadOnlyList<Delivery> Route(EventEnvelope envelope)
     {
-        ArgumentNullException.ThrowIfNull(envelope);
-        if (envelope.EventVersion != 1 || envelope.TenantId == Guid.Empty || envelope.Data.ValueKind != JsonValueKind.Object)
-        {
-            throw new InvalidEventException($"Sobre inválido para {envelope.EventType}.");
-        }
+        EventFields.EnsureValidEnvelope(envelope);
 
         var tenant = envelope.TenantId;
         var data = envelope.Data;
@@ -50,14 +46,7 @@ public static class NoticeRouter
         return deliveries;
     }
 
-    private static Guid Uuid(JsonElement data, string name) =>
-        data.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
-        && Guid.TryParse(value.GetString(), out var id) && id != Guid.Empty
-            ? id
-            : throw new InvalidEventException($"Falta o no es válido data.{name}.");
+    private static Guid Uuid(JsonElement data, string name) => EventFields.Uuid(data, name);
 
-    private static DateTimeOffset Timestamp(JsonElement data, string name) =>
-        data.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String && value.TryGetDateTimeOffset(out var at)
-            ? at
-            : throw new InvalidEventException($"Falta o no es válido data.{name}.");
+    private static DateTimeOffset Timestamp(JsonElement data, string name) => EventFields.Timestamp(data, name);
 }
