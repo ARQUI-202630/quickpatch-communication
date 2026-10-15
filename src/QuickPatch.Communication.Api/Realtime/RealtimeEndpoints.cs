@@ -1,3 +1,5 @@
+using Microsoft.Extensions.DependencyInjection.Extensions;
+
 using QuickPatch.Communication.Application.Realtime;
 
 namespace QuickPatch.Communication.Api.Realtime;
@@ -10,7 +12,7 @@ public static class RealtimeEndpoints
     {
         services.Configure<RealtimeOptions>(configuration.GetSection(RealtimeOptions.Section));
         services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.Section));
-        services.AddSingleton(TimeProvider.System);
+        services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<TokenValidator>();
         services.AddSingleton<ConnectionRegistry>();
         services.AddSingleton<IRealtimeConnections>(sp => sp.GetRequiredService<ConnectionRegistry>());

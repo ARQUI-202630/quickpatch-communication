@@ -13,6 +13,8 @@ data:
   Jwt__Audience: "quickpatch"
   Kafka__BootstrapServers: "<vm-mensajeria>:9092"
   Kafka__ConsumerGroupId: "communication-service"
+  # Grupo propio del buzón (DD 5.22): lee desde el principio y confirma después de guardar.
+  Kafka__InboxConsumerGroupId: "communication-inbox"
   Realtime__AuthTimeoutSeconds: "10"
   Realtime__MaxFrameBytes: "8192"
   Realtime__KeepAliveSeconds: "30"
@@ -42,6 +44,17 @@ spec:
         # La imagen declara USER app (por nombre); Kubernetes necesita el UID para verificar que no es root.
         runAsUser: 1654
         runAsGroup: 1654
+      initContainers:
+        # Migraciones del buzón (EF Core bundle) con el rol communication_migrator, dueño de las tablas (DD 10.1).
+        - name: migraciones
+          image: ghcr.io/arqui-202630/quickpatch-communication:pendiente
+          command: ["/app/efbundle", "--connection", "$(MIGRATOR_CONNECTION)"]
+          env:
+            - name: MIGRATOR_CONNECTION
+              valueFrom: { secretKeyRef: { name: communication-secretos, key: migrator-connection } }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 500m, memory: 256Mi }
       # Al detenerse, el servicio cierra los WebSocket con 1001 para que las apps se reconecten al pod nuevo.
       terminationGracePeriodSeconds: 20
       containers:
@@ -52,6 +65,8 @@ spec:
           envFrom:
             - configMapRef: { name: communication-config }
           env:
+            - name: ConnectionStrings__Communication
+              valueFrom: { secretKeyRef: { name: communication-secretos, key: app-connection } }
             - name: Jwt__PublicKeyPem
               valueFrom: { secretKeyRef: { name: communication-secretos, key: jwt-public-key } }
           readinessProbe:
@@ -92,3 +107,4 @@ spec:
     - http:
         paths:
           - { path: /v1/realtime, pathType: Exact, backend: { service: { name: communication, port: { name: http } } } }
+          - { path: /v1/notifications, pathType: Prefix, backend: { service: { name: communication, port: { name: http } } } }
