@@ -18,7 +18,7 @@ Notificaciones y comunicaciones desacopladas orientadas a eventos.
 WebSocket `/v1/realtime`. Contrato: `contracts/api-gateway/asyncapi/realtime.v1.yaml` (AsyncAPI 3.0).
 
 - La app envía `{"type":"auth","token":"<jwt>"}` en los primeros 10 segundos. El servicio valida el JWT con la llave pública de Identity (RS256, ADR-018) y toma el usuario, el tenant y el rol solo del token. El token no se guarda ni se registra en logs.
-- Por cada evento de Kafka que consume (`service-request.created` y los cuatro `matching.*` del DD 8.5), envía un aviso sin detalle al cliente, al técnico o a los `admin_tenant` del tenant del evento. Nunca a otro tenant.
+- Por cada evento de Kafka que consume (`service-request.created`, `service-request.status-changed` y `matching.offer-created`, DD 8.5), envía un aviso sin detalle al cliente, al técnico o a los `admin_tenant` del tenant del evento. Nunca a otro tenant. El aviso de estado sale de ServiceRequest, que publica `status-changed` solo cuando aplicó el cambio; los eventos de Matching que cambian el estado ya no generan aviso, porque ServiceRequest puede descartarlos por viejos (SCRUM-466).
 - Códigos de cierre: `4000` trama inválida, `4001` token inválido, `4002` sin autenticación, `4003` rol que no usa el canal, `4004` token vencido, `1001` reinicio, `1009` trama de más de 8 KB.
 - Las conexiones viven en memoria: el servicio corre con una réplica y no tiene base de datos todavía (ADR-023, ADR-024).
 - Despliegue: `deploy/k8s/` (Ingress de `/v1/realtime`).
