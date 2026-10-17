@@ -9,7 +9,8 @@ public sealed class InvalidEventException(string message) : Exception(message);
 
 /// <summary>
 /// Decide a quién avisar por cada evento (DD 8.5, Cuadro de avisos). Solo usa el contenido del evento: los eventos
-/// llevan <c>clientId</c> y <c>technicianId</c>, así que Communication no necesita tablas propias.
+/// llevan <c>clientId</c> y <c>technicianId</c>, así que Communication no necesita tablas propias. El aviso de estado
+/// sale de ServiceRequest, que solo publica <c>service-request.status-changed</c> cuando aplicó el cambio (SCRUM-466).
 /// </summary>
 public static class NoticeRouter
 {
@@ -28,9 +29,8 @@ public static class NoticeRouter
         return envelope.EventType switch
         {
             EventTypes.ServiceRequestCreated => StatusChange(tenant, Uuid(data, "serviceRequestId"), "buscando_tecnico", at, Uuid(data, "clientId")),
-            EventTypes.TechnicianAssigned => StatusChange(tenant, Uuid(data, "serviceRequestId"), "asignado", at, Uuid(data, "clientId"), Uuid(data, "technicianId")),
-            EventTypes.NoTechnicianAvailable => StatusChange(tenant, Uuid(data, "serviceRequestId"), "en_espera", at, Uuid(data, "clientId")),
-            EventTypes.SearchResumed => StatusChange(tenant, Uuid(data, "serviceRequestId"), "buscando_tecnico", at, Uuid(data, "clientId")),
+            EventTypes.ServiceRequestStatusChanged => StatusChange(
+                tenant, Uuid(data, "serviceRequestId"), Text(data, "status"), at, [Uuid(data, "clientId"), .. OptionalUuid(data, "technicianId")]),
             EventTypes.OfferCreated =>
             [
                 new Delivery(
@@ -49,6 +49,15 @@ public static class NoticeRouter
         deliveries.Add(new Delivery(tenant, new RoleRecipient(Roles.AdminTenant), new ServiceRequestCountsChanged(at)));
         return deliveries;
     }
+
+    /// <summary>El técnico es opcional: ausente o nulo si la solicitud no tiene uno; si viene, debe ser válido.</summary>
+    private static Guid[] OptionalUuid(JsonElement data, string name) =>
+        data.TryGetProperty(name, out var value) && value.ValueKind != JsonValueKind.Null ? [Uuid(data, name)] : [];
+
+    private static string Text(JsonElement data, string name) =>
+        data.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(value.GetString())
+            ? value.GetString()!
+            : throw new InvalidEventException($"Falta o no es válido data.{name}.");
 
     private static Guid Uuid(JsonElement data, string name) =>
         data.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String

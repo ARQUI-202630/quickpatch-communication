@@ -67,15 +67,15 @@ public sealed class KafkaToRealtimeTests : IAsyncLifetime
             var evento = JsonSerializer.Serialize(new
             {
                 eventId = Guid.NewGuid(),
-                eventType = EventTypes.NoTechnicianAvailable,
+                eventType = EventTypes.ServiceRequestStatusChanged,
                 eventVersion = 1,
                 occurredAt = "2026-10-12T16:10:00Z",
                 correlationId = Guid.NewGuid(),
                 tenantId = tenant,
-                producer = "matching-service",
-                data = new { serviceRequestId = request, clientId = client, attemptsCount = 3 },
+                producer = "service-request-service",
+                data = new { serviceRequestId = request, clientId = client, technicianId = (Guid?)null, previousStatus = "buscando_tecnico", status = "en_espera", changedAt = "2026-10-12T16:10:00Z" },
             });
-            await producer.ProduceAsync(EventTypes.NoTechnicianAvailable, new Message<string, string> { Key = request.ToString(), Value = evento });
+            await producer.ProduceAsync(EventTypes.ServiceRequestStatusChanged, new Message<string, string> { Key = request.ToString(), Value = evento });
             aviso = await ReceiveAsync(clientSocket, TimeSpan.FromSeconds(1));
         }
 

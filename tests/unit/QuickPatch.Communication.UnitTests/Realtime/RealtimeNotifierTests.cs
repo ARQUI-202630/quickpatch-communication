@@ -20,7 +20,7 @@ public class RealtimeNotifierTests
         }
     }
 
-    private static string Message(Guid eventId, string type = EventTypes.SearchResumed) => JsonSerializer.Serialize(new
+    private static string Message(Guid eventId, string type = EventTypes.ServiceRequestStatusChanged) => JsonSerializer.Serialize(new
     {
         eventId,
         eventType = type,
@@ -28,8 +28,8 @@ public class RealtimeNotifierTests
         occurredAt = "2026-10-12T16:10:00Z",
         correlationId = Guid.NewGuid(),
         tenantId = Guid.NewGuid(),
-        producer = "matching-service",
-        data = new { serviceRequestId = Guid.NewGuid(), clientId = Guid.NewGuid(), trigger = "aprobacion" },
+        producer = "service-request-service",
+        data = new { serviceRequestId = Guid.NewGuid(), clientId = Guid.NewGuid(), previousStatus = "en_espera", status = "buscando_tecnico", changedAt = "2026-10-12T16:10:00Z" },
     });
 
     [Fact]
@@ -48,8 +48,8 @@ public class RealtimeNotifierTests
     [Theory]
     [InlineData("no es json")]
     [InlineData("null")]
-    [InlineData("{\"eventType\":\"matching.search-resumed\"}")]
-    [InlineData("{\"eventId\":\"5b1f0c3a-0000-4000-8000-000000000001\",\"eventType\":\"matching.search-resumed\",\"eventVersion\":1,\"occurredAt\":\"2026-10-12T16:10:00Z\",\"tenantId\":\"5b1f0c3a-0000-4000-8000-000000000002\",\"producer\":\"matching-service\",\"data\":{}}")]
+    [InlineData("{\"eventType\":\"service-request.status-changed\"}")]
+    [InlineData("{\"eventId\":\"5b1f0c3a-0000-4000-8000-000000000001\",\"eventType\":\"service-request.status-changed\",\"eventVersion\":1,\"occurredAt\":\"2026-10-12T16:10:00Z\",\"tenantId\":\"5b1f0c3a-0000-4000-8000-000000000002\",\"producer\":\"service-request-service\",\"data\":{}}")]
     public async Task MensajeFueraDeContrato_SeDescartaSinEntregar(string message)
     {
         var connections = new FakeConnections();
