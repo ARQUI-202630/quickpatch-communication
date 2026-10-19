@@ -9,5 +9,8 @@ public sealed class KafkaOptions
 
     public string ConsumerGroupId { get; set; } = "communication-service";
 
+    /// <summary>Grupo propio del buzón: lee desde el principio y confirma después de guardar (DD 5.22).</summary>
+    public string InboxConsumerGroupId { get; set; } = "communication-inbox";
+
     public bool Enabled => !string.IsNullOrWhiteSpace(BootstrapServers);
 }

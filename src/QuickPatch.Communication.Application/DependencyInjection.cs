@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
+using QuickPatch.Communication.Application.Inbox;
 using QuickPatch.Communication.Application.Realtime;
 
 namespace QuickPatch.Communication.Application;
@@ -14,6 +16,10 @@ public static class DependencyInjection
         ArgumentNullException.ThrowIfNull(services);
         services.AddSingleton<RecentEventIds>();
         services.AddSingleton<RealtimeNotifier>();
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddScoped<InboxRecorder>();
+        services.AddScoped<ListNotificationsHandler>();
+        services.AddScoped<MarkNotificationReadHandler>();
         return services;
     }
 }

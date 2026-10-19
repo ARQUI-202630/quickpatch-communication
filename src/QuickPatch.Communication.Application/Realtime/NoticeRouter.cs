@@ -16,11 +16,7 @@ public static class NoticeRouter
 {
     public static IReadOnlyList<Delivery> Route(EventEnvelope envelope)
     {
-        ArgumentNullException.ThrowIfNull(envelope);
-        if (envelope.EventVersion != 1 || envelope.TenantId == Guid.Empty || envelope.Data.ValueKind != JsonValueKind.Object)
-        {
-            throw new InvalidEventException($"Sobre inválido para {envelope.EventType}.");
-        }
+        EventFields.EnsureValidEnvelope(envelope);
 
         var tenant = envelope.TenantId;
         var data = envelope.Data;
@@ -28,15 +24,19 @@ public static class NoticeRouter
 
         return envelope.EventType switch
         {
-            EventTypes.ServiceRequestCreated => StatusChange(tenant, Uuid(data, "serviceRequestId"), "buscando_tecnico", at, Uuid(data, "clientId")),
+            EventTypes.ServiceRequestCreated => StatusChange(
+                tenant, EventFields.Uuid(data, "serviceRequestId"), "buscando_tecnico", at, EventFields.Uuid(data, "clientId")),
             EventTypes.ServiceRequestStatusChanged => StatusChange(
-                tenant, Uuid(data, "serviceRequestId"), Text(data, "status"), at, [Uuid(data, "clientId"), .. OptionalUuid(data, "technicianId")]),
+                tenant, EventFields.Uuid(data, "serviceRequestId"), EventFields.Text(data, "status"), at,
+                [EventFields.Uuid(data, "clientId"), .. OptionalUuid(data, "technicianId")]),
             EventTypes.OfferCreated =>
             [
                 new Delivery(
                     tenant,
-                    new UserRecipient(Uuid(data, "technicianId")),
-                    new OfferCreated(Uuid(data, "attemptId"), Uuid(data, "serviceRequestId"), Timestamp(data, "expiresAt"), at)),
+                    new UserRecipient(EventFields.Uuid(data, "technicianId")),
+                    new OfferCreated(
+                        EventFields.Uuid(data, "attemptId"), EventFields.Uuid(data, "serviceRequestId"),
+                        EventFields.Timestamp(data, "expiresAt"), at)),
             ],
             _ => [],
         };
@@ -51,22 +51,6 @@ public static class NoticeRouter
     }
 
     /// <summary>El técnico es opcional: ausente o nulo si la solicitud no tiene uno; si viene, debe ser válido.</summary>
-    private static Guid[] OptionalUuid(JsonElement data, string name) =>
-        data.TryGetProperty(name, out var value) && value.ValueKind != JsonValueKind.Null ? [Uuid(data, name)] : [];
-
-    private static string Text(JsonElement data, string name) =>
-        data.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(value.GetString())
-            ? value.GetString()!
-            : throw new InvalidEventException($"Falta o no es válido data.{name}.");
-
-    private static Guid Uuid(JsonElement data, string name) =>
-        data.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
-        && Guid.TryParse(value.GetString(), out var id) && id != Guid.Empty
-            ? id
-            : throw new InvalidEventException($"Falta o no es válido data.{name}.");
-
-    private static DateTimeOffset Timestamp(JsonElement data, string name) =>
-        data.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String && value.TryGetDateTimeOffset(out var at)
-            ? at
-            : throw new InvalidEventException($"Falta o no es válido data.{name}.");
+    internal static Guid[] OptionalUuid(JsonElement data, string name) =>
+        data.TryGetProperty(name, out var value) && value.ValueKind != JsonValueKind.Null ? [EventFields.Uuid(data, name)] : [];
 }
