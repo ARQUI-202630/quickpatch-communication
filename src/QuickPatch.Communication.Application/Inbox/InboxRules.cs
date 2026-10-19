@@ -48,8 +48,8 @@ public static class InboxRules
     }
 
     /// <summary>
-    /// Avisos de estado del buzón (DD 8.2.6): la asignación, la espera y la búsqueda retomada. Los demás estados todavía no
-    /// tienen tipo de notificación en <c>communication.v1.yaml</c> 1.0.0 y solo llegan por el canal en tiempo real.
+    /// Avisos de estado del buzón (DD 8.2.6): la asignación, la espera, la búsqueda retomada y la cancelación (1.1.0). Los
+    /// demás estados todavía no tienen tipo de notificación en <c>communication.v1.yaml</c> y solo llegan por el canal.
     /// </summary>
     private static IReadOnlyList<NewNotification> StatusChanged(JsonElement data)
     {
@@ -63,6 +63,7 @@ public static class InboxRules
                 new(client, NotificationTypes.SinTecnicoDisponible, "Tu solicitud quedó en espera",
                     "Por ahora no hay técnicos disponibles. Te avisaremos cuando retomemos la búsqueda.", serviceRequest),
             ],
+            (_, "cancelado") => Cancellation(serviceRequest, client, NoticeRouter.OptionalUuid(data, "technicianId")),
             ("en_espera", "buscando_tecnico") =>
             [
                 new(client, NotificationTypes.BusquedaReanudada, "Retomamos la búsqueda",
@@ -71,6 +72,19 @@ public static class InboxRules
             _ => [],
         };
     }
+
+    /// <summary>
+    /// La cancelación (RF-36): al cliente dueño y, si lo había, al técnico asignado. Sin el motivo, que es un dato del
+    /// usuario y la app muestra desde el detalle de la solicitud.
+    /// </summary>
+    private static IReadOnlyList<NewNotification> Cancellation(Guid serviceRequestId, Guid clientId, Guid[] technician) =>
+    [
+        new(clientId, NotificationTypes.SolicitudCancelada, "Tu solicitud se canceló",
+            "La solicitud quedó cancelada. En su detalle puedes ver el motivo.", serviceRequestId),
+        .. technician.Where(t => t != clientId).Select(t => new NewNotification(
+            t, NotificationTypes.SolicitudCancelada, "Se canceló un servicio asignado",
+            "El servicio que tenías asignado se canceló; ya no tienes que atenderlo.", serviceRequestId)),
+    ];
 
     /// <summary>
     /// La asignación de un técnico a una solicitud: <c>tecnico-asignado</c> al cliente dueño y <c>solicitud-asignada</c>

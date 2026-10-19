@@ -27,6 +27,7 @@ public class InboxRulesTests
         { EventTypes.ServiceRequestCreated, new { serviceRequestId = Request, clientId = Client }, NotificationTypes.SolicitudCreada, "cliente" },
         { EventTypes.ServiceRequestStatusChanged, Changed("buscando_tecnico", "en_espera"), NotificationTypes.SinTecnicoDisponible, "cliente" },
         { EventTypes.ServiceRequestStatusChanged, Changed("en_espera", "buscando_tecnico"), NotificationTypes.BusquedaReanudada, "cliente" },
+        { EventTypes.ServiceRequestStatusChanged, Changed("buscando_tecnico", "cancelado"), NotificationTypes.SolicitudCancelada, "cliente" },
         { EventTypes.OfferCreated, new { serviceRequestId = Request, technicianId = Technician, attemptId = Guid.NewGuid() }, NotificationTypes.OfertaRecibida, "tecnico" },
     };
 
@@ -55,14 +56,37 @@ public class InboxRulesTests
     }
 
     [Theory]
-    [InlineData("buscando_tecnico", "cancelado")]
-    [InlineData("asignado", "cancelado")]
     [InlineData("asignado", "cotizado")]
+    [InlineData("cotizacion_aceptada", "en_progreso")]
     [InlineData("buscando_tecnico", "buscando_tecnico")]
     public void OtroCambioDeEstado_SinNotificacionDelBuzon(string previous, string status)
     {
         // Sin tipo en communication.v1.yaml 1.0.0: el aviso solo va por el canal en tiempo real.
         Assert.Empty(InboxRules.From(Events.Envelope(EventTypes.ServiceRequestStatusChanged, Changed(previous, status, Technician))));
+    }
+
+    [Fact]
+    public void Cancelado_AvisaAlClienteYAlTecnicoAsignadoSinElMotivo()
+    {
+        var result = InboxRules.From(Events.Envelope(EventTypes.ServiceRequestStatusChanged, Changed("asignado", "cancelado", Technician)));
+
+        Assert.Equal(2, result.Count);
+        Assert.All(result, n =>
+        {
+            Assert.Equal(NotificationTypes.SolicitudCancelada, n.Type);
+            Assert.Equal(Request, n.ServiceRequestId);
+            Assert.DoesNotContain("Motivo", n.Message, StringComparison.Ordinal);
+        });
+        Assert.Contains(result, n => n.UserId == Client);
+        Assert.Contains(result, n => n.UserId == Technician);
+    }
+
+    [Fact]
+    public void CanceladoSinTecnico_SoloAlCliente()
+    {
+        var n = Assert.Single(InboxRules.From(Events.Envelope(EventTypes.ServiceRequestStatusChanged, Changed("buscando_tecnico", "cancelado"))));
+
+        Assert.Equal((Client, NotificationTypes.SolicitudCancelada), (n.UserId, n.Type));
     }
 
     [Fact]

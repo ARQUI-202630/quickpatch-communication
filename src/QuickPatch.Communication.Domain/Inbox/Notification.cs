@@ -1,6 +1,6 @@
 namespace QuickPatch.Communication.Domain.Inbox;
 
-/// <summary>Tipos de notificación del buzón (<c>communication.v1.yaml</c> 1.0.0, <c>NotificationType</c>).</summary>
+/// <summary>Tipos de notificación del buzón (<c>communication.v1.yaml</c> 1.1.0, <c>NotificationType</c>).</summary>
 public static class NotificationTypes
 {
     public const string SolicitudCreada = "solicitud-creada";
@@ -12,10 +12,13 @@ public static class NotificationTypes
     public const string RegistroRecibido = "registro-recibido";
     public const string VerificacionActualizada = "verificacion-actualizada";
 
+    /// <summary>Desde 1.1.0 (RF-36, SCRUM-472).</summary>
+    public const string SolicitudCancelada = "solicitud-cancelada";
+
     public static IReadOnlyList<string> All { get; } =
     [
         SolicitudCreada, TecnicoAsignado, SolicitudAsignada, SinTecnicoDisponible, BusquedaReanudada, OfertaRecibida,
-        RegistroRecibido, VerificacionActualizada,
+        RegistroRecibido, VerificacionActualizada, SolicitudCancelada,
     ];
 }
 
