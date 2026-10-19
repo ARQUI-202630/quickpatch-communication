@@ -65,6 +65,7 @@ spec:
           envFrom:
             - configMapRef: { name: communication-config }
           env:
+            # Base propia db_communication (buzón de notificaciones, ADR-024). La conexión es del rol communication_app, sujeto a RLS.
             - name: ConnectionStrings__Communication
               valueFrom: { secretKeyRef: { name: communication-secretos, key: app-connection } }
             - name: Jwt__PublicKeyPem

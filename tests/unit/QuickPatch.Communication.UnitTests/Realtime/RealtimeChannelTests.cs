@@ -105,8 +105,8 @@ public sealed class RealtimeChannelTests : IClassFixture<RealtimeChannelTests.Fa
         using var otherTenantClient = await ConnectAuthenticatedAsync(client, TenantB, "cliente");
         using var otherTenantAdmin = await ConnectAuthenticatedAsync(Guid.NewGuid(), TenantB, "admin_tenant");
 
-        await PublishAsync(Event(EventTypes.TechnicianAssigned, TenantA,
-            new { serviceRequestId = request, clientId = client, attemptId = Guid.NewGuid(), technicianId = technician, assignedAt = "2026-10-12T16:10:00Z" }));
+        await PublishAsync(Event(EventTypes.ServiceRequestStatusChanged, TenantA,
+            new { serviceRequestId = request, clientId = client, technicianId = technician, previousStatus = "buscando_tecnico", status = "asignado", changedAt = "2026-10-12T16:10:00Z" }));
 
         foreach (var socket in new[] { clientSocket, technicianSocket })
         {

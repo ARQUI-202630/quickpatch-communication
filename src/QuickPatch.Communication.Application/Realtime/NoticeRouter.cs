@@ -9,7 +9,8 @@ public sealed class InvalidEventException(string message) : Exception(message);
 
 /// <summary>
 /// Decide a quién avisar por cada evento (DD 8.5, Cuadro de avisos). Solo usa el contenido del evento: los eventos
-/// llevan <c>clientId</c> y <c>technicianId</c>, así que Communication no necesita tablas propias.
+/// llevan <c>clientId</c> y <c>technicianId</c>, así que Communication no necesita tablas propias. El aviso de estado
+/// sale de ServiceRequest, que solo publica <c>service-request.status-changed</c> cuando aplicó el cambio (SCRUM-466).
 /// </summary>
 public static class NoticeRouter
 {
@@ -23,16 +24,19 @@ public static class NoticeRouter
 
         return envelope.EventType switch
         {
-            EventTypes.ServiceRequestCreated => StatusChange(tenant, Uuid(data, "serviceRequestId"), "buscando_tecnico", at, Uuid(data, "clientId")),
-            EventTypes.TechnicianAssigned => StatusChange(tenant, Uuid(data, "serviceRequestId"), "asignado", at, Uuid(data, "clientId"), Uuid(data, "technicianId")),
-            EventTypes.NoTechnicianAvailable => StatusChange(tenant, Uuid(data, "serviceRequestId"), "en_espera", at, Uuid(data, "clientId")),
-            EventTypes.SearchResumed => StatusChange(tenant, Uuid(data, "serviceRequestId"), "buscando_tecnico", at, Uuid(data, "clientId")),
+            EventTypes.ServiceRequestCreated => StatusChange(
+                tenant, EventFields.Uuid(data, "serviceRequestId"), "buscando_tecnico", at, EventFields.Uuid(data, "clientId")),
+            EventTypes.ServiceRequestStatusChanged => StatusChange(
+                tenant, EventFields.Uuid(data, "serviceRequestId"), EventFields.Text(data, "status"), at,
+                [EventFields.Uuid(data, "clientId"), .. OptionalUuid(data, "technicianId")]),
             EventTypes.OfferCreated =>
             [
                 new Delivery(
                     tenant,
-                    new UserRecipient(Uuid(data, "technicianId")),
-                    new OfferCreated(Uuid(data, "attemptId"), Uuid(data, "serviceRequestId"), Timestamp(data, "expiresAt"), at)),
+                    new UserRecipient(EventFields.Uuid(data, "technicianId")),
+                    new OfferCreated(
+                        EventFields.Uuid(data, "attemptId"), EventFields.Uuid(data, "serviceRequestId"),
+                        EventFields.Timestamp(data, "expiresAt"), at)),
             ],
             _ => [],
         };
@@ -46,7 +50,7 @@ public static class NoticeRouter
         return deliveries;
     }
 
-    private static Guid Uuid(JsonElement data, string name) => EventFields.Uuid(data, name);
-
-    private static DateTimeOffset Timestamp(JsonElement data, string name) => EventFields.Timestamp(data, name);
+    /// <summary>El técnico es opcional: ausente o nulo si la solicitud no tiene uno; si viene, debe ser válido.</summary>
+    internal static Guid[] OptionalUuid(JsonElement data, string name) =>
+        data.TryGetProperty(name, out var value) && value.ValueKind != JsonValueKind.Null ? [EventFields.Uuid(data, name)] : [];
 }

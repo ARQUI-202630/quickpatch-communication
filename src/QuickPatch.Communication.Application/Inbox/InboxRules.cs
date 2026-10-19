@@ -28,23 +28,9 @@ public static class InboxRules
                     "Estamos buscando un técnico disponible para tu solicitud.", EventFields.Uuid(data, "serviceRequestId")),
             ],
 
-            // SCRUM-466 va a publicar la asignación desde ServiceRequest. Al cambiar de evento solo cambia esta entrada,
-            // que lee la solicitud, el cliente y el técnico; tipos, destinatarios y textos están en Assignment().
-            EventTypes.TechnicianAssigned => Assignment(
-                EventFields.Uuid(data, "serviceRequestId"), EventFields.Uuid(data, "clientId"), EventFields.Uuid(data, "technicianId")),
+            // El estado sale de ServiceRequest, que solo publica status-changed cuando aplicó el cambio (SCRUM-466).
+            EventTypes.ServiceRequestStatusChanged => StatusChanged(data),
 
-            EventTypes.NoTechnicianAvailable =>
-            [
-                new(EventFields.Uuid(data, "clientId"), NotificationTypes.SinTecnicoDisponible, "Tu solicitud quedó en espera",
-                    "Por ahora no hay técnicos disponibles. Te avisaremos cuando retomemos la búsqueda.",
-                    EventFields.Uuid(data, "serviceRequestId")),
-            ],
-            EventTypes.SearchResumed =>
-            [
-                new(EventFields.Uuid(data, "clientId"), NotificationTypes.BusquedaReanudada, "Retomamos la búsqueda",
-                    "Hay técnicos disponibles otra vez y estamos buscando uno para tu solicitud.",
-                    EventFields.Uuid(data, "serviceRequestId")),
-            ],
             EventTypes.OfferCreated =>
             [
                 new(EventFields.Uuid(data, "technicianId"), NotificationTypes.OfertaRecibida, "Tienes una oferta nueva",
@@ -57,6 +43,31 @@ public static class InboxRules
                     "Tu cuenta quedó pendiente de verificación. Te avisaremos cuando la revisemos.", null),
             ],
             EventTypes.VerificationChanged => [VerificationChanged(data)],
+            _ => [],
+        };
+    }
+
+    /// <summary>
+    /// Avisos de estado del buzón (DD 8.2.6): la asignación, la espera y la búsqueda retomada. Los demás estados todavía no
+    /// tienen tipo de notificación en <c>communication.v1.yaml</c> 1.0.0 y solo llegan por el canal en tiempo real.
+    /// </summary>
+    private static IReadOnlyList<NewNotification> StatusChanged(JsonElement data)
+    {
+        var serviceRequest = EventFields.Uuid(data, "serviceRequestId");
+        var client = EventFields.Uuid(data, "clientId");
+        return (EventFields.Text(data, "previousStatus"), EventFields.Text(data, "status")) switch
+        {
+            (_, "asignado") => Assignment(serviceRequest, client, EventFields.Uuid(data, "technicianId")),
+            (_, "en_espera") =>
+            [
+                new(client, NotificationTypes.SinTecnicoDisponible, "Tu solicitud quedó en espera",
+                    "Por ahora no hay técnicos disponibles. Te avisaremos cuando retomemos la búsqueda.", serviceRequest),
+            ],
+            ("en_espera", "buscando_tecnico") =>
+            [
+                new(client, NotificationTypes.BusquedaReanudada, "Retomamos la búsqueda",
+                    "Hay técnicos disponibles otra vez y estamos buscando uno para tu solicitud.", serviceRequest),
+            ],
             _ => [],
         };
     }

@@ -11,11 +11,22 @@ public class InboxRulesTests
     private static readonly Guid Client = Guid.NewGuid();
     private static readonly Guid Technician = Guid.NewGuid();
 
+    /// <summary><c>data</c> de <c>service-request.status-changed</c> v1 (SCRUM-466).</summary>
+    private static object Changed(string previous, string status, Guid? technician = null) => new
+    {
+        serviceRequestId = Request,
+        clientId = Client,
+        technicianId = technician,
+        previousStatus = previous,
+        status,
+        changedAt = "2026-10-19T16:10:00Z",
+    };
+
     public static TheoryData<string, object, string, string> ClientOrTechnicianEvents() => new()
     {
         { EventTypes.ServiceRequestCreated, new { serviceRequestId = Request, clientId = Client }, NotificationTypes.SolicitudCreada, "cliente" },
-        { EventTypes.NoTechnicianAvailable, new { serviceRequestId = Request, clientId = Client }, NotificationTypes.SinTecnicoDisponible, "cliente" },
-        { EventTypes.SearchResumed, new { serviceRequestId = Request, clientId = Client }, NotificationTypes.BusquedaReanudada, "cliente" },
+        { EventTypes.ServiceRequestStatusChanged, Changed("buscando_tecnico", "en_espera"), NotificationTypes.SinTecnicoDisponible, "cliente" },
+        { EventTypes.ServiceRequestStatusChanged, Changed("en_espera", "buscando_tecnico"), NotificationTypes.BusquedaReanudada, "cliente" },
         { EventTypes.OfferCreated, new { serviceRequestId = Request, technicianId = Technician, attemptId = Guid.NewGuid() }, NotificationTypes.OfertaRecibida, "tecnico" },
     };
 
@@ -33,29 +44,40 @@ public class InboxRulesTests
     }
 
     [Fact]
-    public void TecnicoAsignado_AvisaAlClienteYAlTecnico()
+    public void Asignado_AvisaAlClienteYAlTecnico()
     {
-        var result = InboxRules.From(Events.Envelope(EventTypes.TechnicianAssigned, new
-        {
-            serviceRequestId = Request,
-            clientId = Client,
-            attemptId = Guid.NewGuid(),
-            technicianId = Technician,
-            assignedAt = "2026-10-12T16:10:00Z",
-        }));
+        var result = InboxRules.From(Events.Envelope(
+            EventTypes.ServiceRequestStatusChanged, Changed("buscando_tecnico", "asignado", Technician)));
 
         Assert.Equal(2, result.Count);
         Assert.Contains(result, n => n.UserId == Client && n.Type == NotificationTypes.TecnicoAsignado && n.ServiceRequestId == Request);
         Assert.Contains(result, n => n.UserId == Technician && n.Type == NotificationTypes.SolicitudAsignada && n.ServiceRequestId == Request);
     }
 
-    [Fact]
-    public void Asignacion_NoDependeDelEvento()
+    [Theory]
+    [InlineData("buscando_tecnico", "cancelado")]
+    [InlineData("asignado", "cancelado")]
+    [InlineData("asignado", "cotizado")]
+    [InlineData("buscando_tecnico", "buscando_tecnico")]
+    public void OtroCambioDeEstado_SinNotificacionDelBuzon(string previous, string status)
     {
-        // SCRUM-466 cambiará el evento de origen; la regla de la asignación es la misma.
-        Assert.Equal(
-            InboxRules.Assignment(Request, Client, Technician),
-            InboxRules.From(Events.Envelope(EventTypes.TechnicianAssigned, new { serviceRequestId = Request, clientId = Client, technicianId = Technician })));
+        // Sin tipo en communication.v1.yaml 1.0.0: el aviso solo va por el canal en tiempo real.
+        Assert.Empty(InboxRules.From(Events.Envelope(EventTypes.ServiceRequestStatusChanged, Changed(previous, status, Technician))));
+    }
+
+    [Fact]
+    public void AsignadoSinTecnico_EventoInvalido()
+    {
+        Assert.Throws<InvalidEventException>(() =>
+            InboxRules.From(Events.Envelope(EventTypes.ServiceRequestStatusChanged, Changed("buscando_tecnico", "asignado"))));
+    }
+
+    [Fact]
+    public void EventosDeMatchingDeEstado_YaNoCreanNotificaciones()
+    {
+        // Desde SCRUM-466 el estado sale de ServiceRequest: matching.technician-assigned no está en EventTypes.Inbox.
+        Assert.Empty(InboxRules.From(Events.Envelope("matching.technician-assigned", new { serviceRequestId = Request, clientId = Client, technicianId = Technician })));
+        Assert.DoesNotContain("matching.technician-assigned", EventTypes.Inbox);
     }
 
     [Fact]
@@ -119,7 +141,7 @@ public class InboxRulesTests
     }
 
     [Theory]
-    [InlineData("matching.technician-assigned")]
+    [InlineData("service-request.status-changed")]
     [InlineData("technician.verification-changed")]
     public void EventoSinLosCamposDelContrato_EsInvalido(string eventType)
     {

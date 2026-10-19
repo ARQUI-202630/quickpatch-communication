@@ -82,13 +82,23 @@ public sealed class InboxFlowTests : IAsyncLifetime
         var technician = Guid.NewGuid();
         var request = Guid.NewGuid();
         var assigned = Guid.NewGuid();
-        var data = new { serviceRequestId = request, clientId = client, attemptId = Guid.NewGuid(), technicianId = technician, assignedAt = "2026-10-12T16:10:00Z" };
+        // service-request.status-changed a asignado (SCRUM-466): avisa al cliente y al técnico.
+        var data = new
+        {
+            serviceRequestId = request,
+            clientId = client,
+            technicianId = technician,
+            previousStatus = "buscando_tecnico",
+            status = "asignado",
+            changedAt = "2026-10-12T16:10:00Z",
+        };
+        const string topic = EventTypes.ServiceRequestStatusChanged;
 
-        await PublishAsync(EventTypes.TechnicianAssigned, Event(EventTypes.TechnicianAssigned, tenant, data, assigned));
-        await PublishAsync(EventTypes.TechnicianAssigned, Event(EventTypes.TechnicianAssigned, tenant, data, assigned));
+        await PublishAsync(topic, Event(topic, tenant, data, assigned));
+        await PublishAsync(topic, Event(topic, tenant, data, assigned));
         // Un evento posterior en el mismo topic: cuando aparece, el repetido ya se procesó.
         var marker = Guid.NewGuid();
-        await PublishAsync(EventTypes.TechnicianAssigned, Event(EventTypes.TechnicianAssigned, tenant, data with { }, marker));
+        await PublishAsync(topic, Event(topic, tenant, data with { }, marker));
         await WaitUntilAsync(async () => await CountAsync("source_event_id = @e", marker) == 2, "el evento posterior crea sus notificaciones");
 
         Assert.Equal(2, await CountAsync("source_event_id = @e", assigned));

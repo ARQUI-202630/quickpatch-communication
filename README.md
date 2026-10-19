@@ -18,7 +18,7 @@ Notificaciones y comunicaciones desacopladas orientadas a eventos.
 WebSocket `/v1/realtime`. Contrato: `contracts/api-gateway/asyncapi/realtime.v1.yaml` (AsyncAPI 3.0).
 
 - La app envía `{"type":"auth","token":"<jwt>"}` en los primeros 10 segundos. El servicio valida el JWT con la llave pública de Identity (RS256, ADR-018) y toma el usuario, el tenant y el rol solo del token. El token no se guarda ni se registra en logs.
-- Por cada evento de Kafka que consume (`service-request.created` y los cuatro `matching.*` del DD 8.5), envía un aviso sin detalle al cliente, al técnico o a los `admin_tenant` del tenant del evento. Nunca a otro tenant.
+- Por cada evento de Kafka que consume (`service-request.created`, `service-request.status-changed` y `matching.offer-created`, DD 8.5), envía un aviso sin detalle al cliente, al técnico o a los `admin_tenant` del tenant del evento. Nunca a otro tenant. El aviso de estado sale de ServiceRequest, que publica `status-changed` solo cuando aplicó el cambio; los eventos de Matching que cambian el estado ya no generan aviso, porque ServiceRequest puede descartarlos por viejos (SCRUM-466).
 - Códigos de cierre: `4000` trama inválida, `4001` token inválido, `4002` sin autenticación, `4003` rol que no usa el canal, `4004` token vencido, `1001` reinicio, `1009` trama de más de 8 KB.
 - Las conexiones viven en memoria: el servicio corre con una réplica (ADR-023).
 - Despliegue: `deploy/k8s/` (Ingress de `/v1/realtime` y `/v1/notifications`).
@@ -26,9 +26,9 @@ WebSocket `/v1/realtime`. Contrato: `contracts/api-gateway/asyncapi/realtime.v1.
 ## Buzón de notificaciones (ADR-024, SCRUM-456)
 
 `GET /v1/notifications?unread=&page=&size=` y `POST /v1/notifications/{id}/read`. Contrato:
-`contracts/api-gateway/openapi/communication.v1.yaml` 1.0.0 (gateway `v0.6.0`). Tabla `notifications` en `db_communication` (DD 5.22).
+`contracts/api-gateway/openapi/communication.v1.yaml` 1.0.0 (gateway `v0.8.0`). Tabla `notifications` en `db_communication` (DD 5.22).
 
-- **Quién crea las notificaciones:** solo Communication, al consumir los eventos de la tabla de tipos del contrato (DD 8.2.6). Las reglas están en `InboxRules`; la asignación (`tecnico-asignado` al cliente y `solicitud-asignada` al técnico) está aislada en `InboxRules.Assignment`, para que SCRUM-466 solo cambie el evento del que sale.
+- **Quién crea las notificaciones:** solo Communication, al consumir los eventos de la tabla de tipos del contrato (DD 8.2.6). Las reglas están en `InboxRules`. Los avisos de estado salen de `service-request.status-changed` (SCRUM-466), igual que en el canal: `asignado` crea `tecnico-asignado` (cliente) y `solicitud-asignada` (técnico); `en_espera`, `sin-tecnico-disponible`; y `en_espera` → `buscando_tecnico`, `busqueda-reanudada`. Los demás estados, como `cancelado`, todavía no tienen tipo en el contrato y solo llegan por el canal.
 - **Consumidor propio** (`Kafka:InboxConsumerGroupId`, por defecto `communication-inbox`): a diferencia del canal, lee desde el principio y confirma el offset solo después de guardar. Si la base falla, vuelve al mismo mensaje y reintenta. Un evento repetido no duplica nada: `UNIQUE (source_event_id, user_id)` con `ON CONFLICT DO NOTHING`.
 - **Aislamiento:** el usuario y el tenant salen solo de `sub` y `tenant_id` del JWT. Cada operación fija `app.current_tenant` en su transacción y la tabla tiene RLS forzado; el consumidor usa el `tenantId` del evento. Una notificación de otro usuario o tenant responde `404`.
 - **Permisos:** `communication_app` tiene `SELECT` e `INSERT`, y `UPDATE` solo sobre `read_at` (`db/roles.sql` y la migración).

@@ -15,8 +15,16 @@ public class InboxRecorderTests
 
     private InboxRecorder Recorder() => new(_store, NullLogger<InboxRecorder>.Instance);
 
-    private string Assigned(Guid? eventId = null) => Events.Json(
-        EventTypes.TechnicianAssigned, _tenant, new { serviceRequestId = Guid.NewGuid(), clientId = _client, technicianId = _technician }, eventId);
+    private string Assigned(Guid? eventId = null, Guid? technician = null) => Events.Json(
+        EventTypes.ServiceRequestStatusChanged, _tenant, new
+        {
+            serviceRequestId = Guid.NewGuid(),
+            clientId = _client,
+            technicianId = technician ?? _technician,
+            previousStatus = "buscando_tecnico",
+            status = "asignado",
+            changedAt = "2026-10-12T16:10:00Z",
+        }, eventId);
 
     [Fact]
     public async Task Evento_GuardaUnaPorDestinatarioEnElTenantDelEvento()
@@ -50,7 +58,7 @@ public class InboxRecorderTests
     [Theory]
     [InlineData("no es json")]
     [InlineData("{}")]
-    [InlineData("""{"eventId":"0190f3b4-1a2b-7c3d-8e4f-5a6b7c8d9e0f","eventType":"matching.technician-assigned","eventVersion":1,"tenantId":"0190f3b4-1a2b-7c3d-8e4f-5a6b7c8d9e0f","occurredAt":"2026-10-12T16:10:00Z","producer":"x","data":{}}""")]
+    [InlineData("""{"eventId":"0190f3b4-1a2b-7c3d-8e4f-5a6b7c8d9e0f","eventType":"service-request.status-changed","eventVersion":1,"tenantId":"0190f3b4-1a2b-7c3d-8e4f-5a6b7c8d9e0f","occurredAt":"2026-10-12T16:10:00Z","producer":"x","data":{}}""")]
     public async Task EventoInvalido_SeDescartaSinGuardar(string message)
     {
         Assert.Equal(RecordResult.Discarded, await Recorder().HandleAsync(message, CancellationToken.None));
@@ -76,9 +84,7 @@ public class InboxRecorderTests
     [Fact]
     public async Task ClienteYTecnicoIguales_UnaSolaNotificacion()
     {
-        var message = Events.Json(EventTypes.TechnicianAssigned, _tenant, new { serviceRequestId = Guid.NewGuid(), clientId = _client, technicianId = _client });
-
-        await Recorder().HandleAsync(message, CancellationToken.None);
+        await Recorder().HandleAsync(Assigned(technician: _client), CancellationToken.None);
 
         Assert.Equal(NotificationTypes.TecnicoAsignado, Assert.Single(_store.Rows).Type);
     }

@@ -5,7 +5,9 @@ el Ingress de `/v1/realtime` y `/v1/notifications` en el namespace `quickpatch`.
 cambian el secreto y la dirección de Kafka.
 
 Las conexiones del canal en tiempo real viven en memoria (ADR-023). El buzón de notificaciones (ADR-024, DD 5.22) se
-guarda en `db_communication`.
+guarda en `db_communication`, con los roles `communication_migrator` (dueño, solo para las migraciones) y
+`communication_app` (el servicio, bajo RLS). DevOps los crea con `deploy-db.yml`; sus permisos están en `db/roles.sql`
+y se aplican con `aplicar-roles-db.yml` después de las migraciones.
 
 ## Secreto `communication-secretos`
 
@@ -30,8 +32,8 @@ Sin `app-connection` el canal funciona igual, pero el buzón responde `503`.
 
 1. Base: `db_communication` con dueño `communication_migrator` y el rol `communication_app` (Ansible). No necesita PostGIS.
 2. Topics en el Kafka del ambiente, según `quickpatch-kafka/topics/topics.yaml`: `service-request.created`,
-   `matching.offer-created`, `matching.technician-assigned`, `matching.no-technician-available`,
-   `matching.search-resumed` y, para el buzón, `technician.registered` y `technician.verification-changed`. Si un topic
+   `service-request.status-changed`, `matching.offer-created` y, para el buzón, `technician.registered` y
+   `technician.verification-changed`. Si un topic
    todavía no existe, los consumidores esperan y reintentan sin detener el servicio.
 3. Reemplazar `<vm-mensajeria>` en el ConfigMap por la IP de Kafka del ambiente y
    `kubectl apply -f deploy/k8s/communication.yaml`. El pod queda esperando la imagen (`:pendiente`).
