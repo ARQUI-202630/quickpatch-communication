@@ -23,10 +23,14 @@ public static class NoticeRouter
 
         return envelope.EventType switch
         {
-            EventTypes.ServiceRequestCreated => StatusChange(tenant, Uuid(data, "serviceRequestId"), "buscando_tecnico", at, Uuid(data, "clientId")),
-            EventTypes.TechnicianAssigned => StatusChange(tenant, Uuid(data, "serviceRequestId"), "asignado", at, Uuid(data, "clientId"), Uuid(data, "technicianId")),
-            EventTypes.NoTechnicianAvailable => StatusChange(tenant, Uuid(data, "serviceRequestId"), "en_espera", at, Uuid(data, "clientId")),
-            EventTypes.SearchResumed => StatusChange(tenant, Uuid(data, "serviceRequestId"), "buscando_tecnico", at, Uuid(data, "clientId")),
+            EventTypes.ServiceRequestStatusChanged =>
+                data.GetProperty("status").GetString() switch
+                {
+                    "asignado" => StatusChange(tenant, Uuid(data, "serviceRequestId"), "asignado", at, Uuid(data, "clientId"), Uuid(data, "technicianId")),
+                    "en_espera" => StatusChange(tenant, Uuid(data, "serviceRequestId"), "en_espera", at, Uuid(data, "clientId")),
+                    "buscando_tecnico" => StatusChange(tenant, Uuid(data, "serviceRequestId"), "buscando_tecnico", at, Uuid(data, "clientId")),
+                    _ => [],
+                },
             EventTypes.OfferCreated =>
             [
                 new Delivery(
