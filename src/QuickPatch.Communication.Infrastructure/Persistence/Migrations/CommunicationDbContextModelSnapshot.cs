@@ -86,7 +86,7 @@ namespace QuickPatch.Communication.Infrastructure.Persistence.Migrations
 
                     b.ToTable("notifications", null, t =>
                         {
-                            t.HasCheckConstraint("ck_notifications_type", "type IN ('solicitud-creada', 'tecnico-asignado', 'solicitud-asignada', 'sin-tecnico-disponible', 'busqueda-reanudada', 'oferta-recibida', 'registro-recibido', 'verificacion-actualizada', 'solicitud-cancelada')");
+                            t.HasCheckConstraint("ck_notifications_type", "type IN ('solicitud-creada', 'tecnico-asignado', 'solicitud-asignada', 'sin-tecnico-disponible', 'busqueda-reanudada', 'oferta-recibida', 'registro-recibido', 'verificacion-actualizada', 'solicitud-cancelada', 'cotizacion-recibida', 'cotizacion-aceptada', 'cotizacion-rechazada')");
                         });
                 });
 #pragma warning restore 612, 618

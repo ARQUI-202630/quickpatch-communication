@@ -172,6 +172,47 @@ public sealed class InboxFlowTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Cotizacion_LlegaAlBuzon_YElRechazoNoRepiteLaAsignacion()
+    {
+        var (tenant, client, technician, request) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+
+        await PublishAsync(EventTypes.Quoted, Event(EventTypes.Quoted, tenant, new
+        {
+            serviceRequestId = request,
+            quoteId = Guid.NewGuid(),
+            clientId = client,
+            technicianId = technician,
+            quoteNumber = 1,
+            totalAmount = "185000.00",
+            expiresAt = "2026-10-20T20:30:00Z",
+        }));
+        await PublishAsync(EventTypes.QuoteRejected, Event(EventTypes.QuoteRejected, tenant, new
+        {
+            serviceRequestId = request,
+            quoteId = Guid.NewGuid(),
+            technicianId = technician,
+            remainingQuotes = 2,
+        }));
+
+        // El regreso de cotizado a asignado (SCRUM-488) va por el canal, pero no crea otra notificación de asignación.
+        await PublishAsync(EventTypes.ServiceRequestStatusChanged, Event(EventTypes.ServiceRequestStatusChanged, tenant, new
+        {
+            serviceRequestId = request,
+            clientId = client,
+            technicianId = technician,
+            previousStatus = "cotizado",
+            status = "asignado",
+            changedAt = "2026-10-19T16:10:00Z",
+        }));
+
+        await WaitUntilAsync(async () => await CountAsync("user_id = @e", technician) == 1, "llega el rechazo al técnico");
+        await WaitUntilAsync(async () => await CountAsync("user_id = @e", client) == 1, "llega la cotización al cliente");
+
+        Assert.Equal("cotizacion-recibida", await ScalarAdminAsync<string>("SELECT type FROM notifications WHERE user_id = @e", ("e", client)));
+        Assert.Equal("cotizacion-rechazada", await ScalarAdminAsync<string>("SELECT type FROM notifications WHERE user_id = @e", ("e", technician)));
+    }
+
+    [Fact]
     public async Task Rls_ElRolDelServicioSoloVeElTenantFijadoYSoloCambiaReadAt()
     {
         var tenantA = Guid.NewGuid();
