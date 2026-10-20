@@ -27,14 +27,20 @@ public static class EventTypes
     public const string OfferCreated = "matching.offer-created";
     public const string TechnicianRegistered = "technician.registered";
     public const string VerificationChanged = "technician.verification-changed";
+    public const string Quoted = "service-request.quoted";
+    public const string QuoteAccepted = "service-request.quote-accepted";
+    public const string QuoteRejected = "service-request.quote-rejected";
 
     /// <summary>Topics del canal en tiempo real.</summary>
     public static IReadOnlyList<string> Consumed { get; } =
         [ServiceRequestCreated, ServiceRequestStatusChanged, OfferCreated];
 
-    /// <summary>Topics del buzón (tabla de tipos de <c>communication.v1.yaml</c>).</summary>
+    /// <summary>
+    /// Topics del buzón (tabla de tipos de <c>communication.v1.yaml</c>). Los de la cotización (1.2.0) solo van al buzón: el
+    /// canal ya recibe el cambio de estado por <c>service-request.status-changed</c>.
+    /// </summary>
     public static IReadOnlyList<string> Inbox { get; } =
-        [.. Consumed, TechnicianRegistered, VerificationChanged];
+        [.. Consumed, TechnicianRegistered, VerificationChanged, Quoted, QuoteAccepted, QuoteRejected];
 }
 
 /// <summary>Lectura de los campos de <c>data</c>; un campo que falta o no es válido hace inválido el evento.</summary>
@@ -54,6 +60,11 @@ public static class EventFields
     public static string Text(JsonElement data, string name) =>
         data.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(value.GetString())
             ? value.GetString()!
+            : throw new InvalidEventException($"Falta o no es válido data.{name}.");
+
+    public static int Count(JsonElement data, string name) =>
+        data.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number)
+            ? number
             : throw new InvalidEventException($"Falta o no es válido data.{name}.");
 
     public static string? OptionalText(JsonElement data, string name) =>

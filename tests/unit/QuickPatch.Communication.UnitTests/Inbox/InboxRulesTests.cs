@@ -4,7 +4,7 @@ using QuickPatch.Communication.Domain.Inbox;
 
 namespace QuickPatch.Communication.UnitTests.Inbox;
 
-/// <summary>Tabla de tipos de <c>communication.v1.yaml</c> 1.0.0 (DD 8.2.6): qué crea cada evento y para quién.</summary>
+/// <summary>Tabla de tipos de <c>communication.v1.yaml</c> 1.2.0 (DD 8.2.6): qué crea cada evento y para quién.</summary>
 public class InboxRulesTests
 {
     private static readonly Guid Request = Guid.NewGuid();
@@ -29,6 +29,30 @@ public class InboxRulesTests
         { EventTypes.ServiceRequestStatusChanged, Changed("en_espera", "buscando_tecnico"), NotificationTypes.BusquedaReanudada, "cliente" },
         { EventTypes.ServiceRequestStatusChanged, Changed("buscando_tecnico", "cancelado"), NotificationTypes.SolicitudCancelada, "cliente" },
         { EventTypes.OfferCreated, new { serviceRequestId = Request, technicianId = Technician, attemptId = Guid.NewGuid() }, NotificationTypes.OfertaRecibida, "tecnico" },
+        { EventTypes.Quoted, Quoted(), NotificationTypes.CotizacionRecibida, "cliente" },
+        { EventTypes.QuoteAccepted, new { serviceRequestId = Request, quoteId = Guid.NewGuid(), technicianId = Technician, totalAmount = "185000.00" }, NotificationTypes.CotizacionAceptada, "tecnico" },
+        { EventTypes.QuoteRejected, Rejected(2), NotificationTypes.CotizacionRechazada, "tecnico" },
+    };
+
+    /// <summary><c>data</c> de <c>service-request.quoted</c> v1 (quickpatch-kafka v0.6.0).</summary>
+    private static object Quoted() => new
+    {
+        serviceRequestId = Request,
+        quoteId = Guid.NewGuid(),
+        clientId = Client,
+        technicianId = Technician,
+        quoteNumber = 1,
+        totalAmount = "185000.00",
+        expiresAt = "2026-10-20T20:30:00Z",
+    };
+
+    /// <summary><c>data</c> de <c>service-request.quote-rejected</c> v1.</summary>
+    private static object Rejected(int remaining) => new
+    {
+        serviceRequestId = Request,
+        quoteId = Guid.NewGuid(),
+        technicianId = Technician,
+        remainingQuotes = remaining,
     };
 
     [Theory]
@@ -57,11 +81,14 @@ public class InboxRulesTests
 
     [Theory]
     [InlineData("asignado", "cotizado")]
+    [InlineData("cotizado", "cotizacion_aceptada")]
+    [InlineData("cotizado", "asignado")]
     [InlineData("cotizacion_aceptada", "en_progreso")]
     [InlineData("buscando_tecnico", "buscando_tecnico")]
     public void OtroCambioDeEstado_SinNotificacionDelBuzon(string previous, string status)
     {
-        // Sin tipo en communication.v1.yaml 1.0.0: el aviso solo va por el canal en tiempo real.
+        // Sin tipo de estado en communication.v1.yaml 1.2.0: el aviso solo va por el canal en tiempo real. El regreso de
+        // cotizado a asignado no repite la asignación: lo avisa cotizacion-rechazada.
         Assert.Empty(InboxRules.From(Events.Envelope(EventTypes.ServiceRequestStatusChanged, Changed(previous, status, Technician))));
     }
 
@@ -156,6 +183,39 @@ public class InboxRulesTests
 
         Assert.Equal(Notification.MessageMaxLength, n.Message.Length);
         Assert.EndsWith("…", n.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Cotizacion_AvisaAlClienteConElTotalEnPesosYElVencimientoEnHoraDeBogota()
+    {
+        var n = Assert.Single(InboxRules.From(Events.Envelope(EventTypes.Quoted, Quoted())));
+
+        Assert.Contains("$185.000", n.Message, StringComparison.Ordinal);
+        Assert.Contains("20 de octubre a las 3:30", n.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(2, "te quedan 2")]
+    [InlineData(1, "es la última")]
+    [InlineData(0, "la solicitud se canceló")]
+    public void Rechazo_LeDiceAlTecnicoCuantasLeQuedan(int remaining, string expected)
+    {
+        var n = Assert.Single(InboxRules.From(Events.Envelope(EventTypes.QuoteRejected, Rejected(remaining))));
+
+        Assert.Equal(Technician, n.UserId);
+        Assert.Contains(expected, n.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CotizacionConMontoInvalido_EsInvalida()
+    {
+        Assert.Throws<InvalidEventException>(() => InboxRules.From(Events.Envelope(EventTypes.QuoteAccepted, new
+        {
+            serviceRequestId = Request,
+            quoteId = Guid.NewGuid(),
+            technicianId = Technician,
+            totalAmount = "ciento ochenta",
+        })));
     }
 
     [Fact]
