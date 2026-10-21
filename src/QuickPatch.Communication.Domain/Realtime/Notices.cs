@@ -26,6 +26,19 @@ public sealed record ServiceRequestCountsChanged(DateTimeOffset OccurredAt) : Re
     public const string TypeName = "service-request.counts-changed";
 }
 
+/// <summary>
+/// <c>chat.message</c> (<c>realtime.v1.yaml</c> 1.1.0, ADR-026): un mensaje nuevo del chat. A diferencia de los avisos, lleva
+/// el mensaje completo; solo lo reciben los dos participantes. <c>OccurredAt</c> es la hora en que se guardó.
+/// </summary>
+public sealed record ChatMessageNotice(Guid ServiceRequestId, ChatMessageFrame Message)
+    : RealtimeNotice(TypeName, Message.SentAt)
+{
+    public const string TypeName = "chat.message";
+}
+
+/// <summary>El mensaje dentro de <see cref="ChatMessageNotice"/> (esquema <c>ChatMessage</c> del contrato).</summary>
+public sealed record ChatMessageFrame(Guid Id, Guid AuthorId, string AuthorRole, string Text, DateTimeOffset SentAt);
+
 /// <summary>A quién se entrega un aviso dentro del tenant del evento.</summary>
 public abstract record Recipient;
 

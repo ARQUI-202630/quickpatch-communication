@@ -60,6 +60,7 @@ public sealed class InboxFlowTests : IAsyncLifetime
             builder.UseSetting("Kafka:BootstrapServers", _kafka.GetBootstrapAddress());
             builder.UseSetting("Kafka:ConsumerGroupId", "communication-service-pruebas");
             builder.UseSetting("Kafka:InboxConsumerGroupId", "communication-inbox-pruebas");
+            builder.UseSetting("Kafka:ChatConsumerGroupId", "communication-chat-pruebas");
         });
         _ = _factory.Server;
     }
@@ -240,6 +241,78 @@ public sealed class InboxFlowTests : IAsyncLifetime
             ScalarAsync(connection, tenantA, $"UPDATE notifications SET title = 'x' WHERE user_id = '{user}' RETURNING 1"));
         Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, update.SqlState);
         Assert.Equal(1, await ScalarAsync(connection, tenantA, $"UPDATE notifications SET read_at = now() WHERE user_id = '{user}' RETURNING 1"));
+    }
+
+    [Fact]
+    public async Task Chat_ReplicaPorEventos_MensajesEntreParticipantes_YCierreAlCompletar()
+    {
+        var tenant = Guid.NewGuid();
+        var client = Guid.NewGuid();
+        var technician = Guid.NewGuid();
+        var request = Guid.NewGuid();
+        const string topic = EventTypes.ServiceRequestStatusChanged;
+        object Data(string status, string changedAt, Guid? tech) => new
+        {
+            serviceRequestId = request,
+            clientId = client,
+            technicianId = tech,
+            previousStatus = "buscando_tecnico",
+            status,
+            changedAt,
+        };
+        async Task<string?> StatusAsync() => await ScalarAdminAsync<string>(
+            "SELECT status FROM chat_participants WHERE service_request_id = @r", ("r", request));
+        var messages = new Uri($"/v1/service-requests/{request}/messages", UriKind.Relative);
+
+        await PublishAsync(topic, Event(topic, tenant, Data("asignado", "2026-10-21T15:00:00Z", technician)));
+        await WaitUntilAsync(async () => await StatusAsync() == "asignado", "la réplica del chat conoce la solicitud asignada");
+
+        using (var http = As(client, tenant, "cliente"))
+        {
+            using var sent = await http.PostAsync(messages, new StringContent("""{"text":"¿Llega a las 3?"}""", System.Text.Encoding.UTF8, "application/json"));
+            Assert.Equal(HttpStatusCode.Created, sent.StatusCode);
+        }
+
+        using (var http = As(technician, tenant, "tecnico"))
+        {
+            var page = await JsonAsync(await http.GetAsync(messages));
+            Assert.True(page.GetProperty("writable").GetBoolean());
+            Assert.Equal("¿Llega a las 3?", page.GetProperty("items")[0].GetProperty("text").GetString());
+            Assert.Equal("cliente", page.GetProperty("items")[0].GetProperty("authorRole").GetString());
+        }
+
+        // Otro tenant con el mismo usuario y otro usuario del tenant: la solicitud no tiene chat para ellos.
+        using (var otherTenant = As(client, Guid.NewGuid(), "cliente"))
+        using (var stranger = As(Guid.NewGuid(), tenant, "cliente"))
+        {
+            using var a = await otherTenant.GetAsync(messages);
+            using var b = await stranger.GetAsync(messages);
+            Assert.Equal(HttpStatusCode.NotFound, a.StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, b.StatusCode);
+        }
+
+        // Un evento viejo no cambia la réplica (RN-CH3); uno más nuevo a completado la deja de solo lectura (RN-CH2).
+        await PublishAsync(topic, Event(topic, tenant, Data("buscando_tecnico", "2026-10-21T14:00:00Z", null)));
+        await PublishAsync(topic, Event(topic, tenant, Data("completado", "2026-10-21T16:00:00Z", technician)));
+        await WaitUntilAsync(async () => await StatusAsync() == "completado", "la réplica aplica el estado más nuevo");
+        using (var http = As(client, tenant, "cliente"))
+        {
+            using var closed = await http.PostAsync(messages, new StringContent("""{"text":"gracias"}""", System.Text.Encoding.UTF8, "application/json"));
+            Assert.Equal(HttpStatusCode.Conflict, closed.StatusCode);
+            Assert.Contains("chat-cerrado", await closed.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        }
+
+        // RLS: el rol del servicio sin tenant no ve mensajes, y no puede editarlos ni borrarlos.
+        await using var connection = new NpgsqlConnection(AppConnectionString);
+        await connection.OpenAsync();
+        Assert.Equal(0L, await ScalarAsync(connection, null, $"SELECT count(*) FROM chat_messages WHERE service_request_id = '{request}'"));
+        Assert.Equal(1L, await ScalarAsync(connection, tenant, $"SELECT count(*) FROM chat_messages WHERE service_request_id = '{request}'"));
+        var edit = await Assert.ThrowsAsync<PostgresException>(() =>
+            ScalarAsync(connection, tenant, $"UPDATE chat_messages SET body = 'x' WHERE service_request_id = '{request}' RETURNING 1"));
+        Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, edit.SqlState);
+        var delete = await Assert.ThrowsAsync<PostgresException>(() =>
+            ScalarAsync(connection, tenant, $"DELETE FROM chat_messages WHERE service_request_id = '{request}' RETURNING 1"));
+        Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, delete.SqlState);
     }
 
     private static string Event(string type, Guid tenant, object data, Guid? eventId = null, string occurredAt = "2026-10-12T16:10:00Z") =>

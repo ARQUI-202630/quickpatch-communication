@@ -16,3 +16,8 @@ GRANT USAGE ON SCHEMA public TO communication_app;
 -- leída: UPDATE únicamente sobre read_at, para que nadie pueda reescribir el título, el mensaje ni el destinatario.
 GRANT SELECT, INSERT ON notifications TO communication_app;
 GRANT UPDATE (read_at) ON notifications TO communication_app;
+
+-- Chat de la solicitud (DD 5.23 y 5.24, ADR-026). La réplica de participantes se inserta y se actualiza al consumir
+-- service-request.status-changed; los mensajes solo se insertan y se leen.
+GRANT SELECT, INSERT, UPDATE ON chat_participants TO communication_app;
+GRANT SELECT, INSERT ON chat_messages TO communication_app;

@@ -4,21 +4,21 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-using QuickPatch.Communication.Application.Inbox;
-using QuickPatch.Communication.Application.Realtime;
-
 namespace QuickPatch.Communication.Infrastructure.Messaging;
 
 /// <summary>
-/// Consume los eventos de <see cref="EventTypes.Inbox"/> y guarda las notificaciones del buzón (DD 5.22). Tiene su propio
-/// grupo de consumidores: a diferencia del canal, que solo avisa lo que pasa mientras la app está abierta, el buzón no
-/// puede perder eventos. Confirma el offset solo después de guardar; si la base falla, vuelve al mismo mensaje y
-/// reintenta. Un evento repetido no duplica nada (<c>UNIQUE (source_event_id, user_id)</c>).
+/// Consumidor de eventos que se guardan en <c>db_communication</c>: el buzón (DD 5.22) y la réplica del chat (DD 5.23).
+/// Cada uso tiene su propio grupo de consumidores: a diferencia del canal, que solo avisa lo que pasa mientras la app está
+/// abierta, lo guardado no puede perder eventos. Confirma el offset solo después de guardar; si la base falla, vuelve al
+/// mismo mensaje y reintenta. Los manejadores son idempotentes: un evento repetido no duplica nada.
 /// </summary>
-public sealed partial class InboxEventsConsumer(
+public sealed partial class PersistentEventsConsumer(
+    string name,
     IConsumer<string, string> consumer,
+    IReadOnlyList<string> topics,
+    Func<IServiceProvider, string, CancellationToken, Task> handle,
     IServiceScopeFactory scopes,
-    ILogger<InboxEventsConsumer> logger,
+    ILogger<PersistentEventsConsumer> logger,
     TimeSpan? retryDelay = null) : BackgroundService
 {
     private readonly TimeSpan _retryDelay = retryDelay ?? TimeSpan.FromSeconds(5);
@@ -28,7 +28,7 @@ public sealed partial class InboxEventsConsumer(
 
     private async Task ConsumeLoopAsync(CancellationToken stoppingToken)
     {
-        consumer.Subscribe(EventTypes.Inbox);
+        consumer.Subscribe(topics);
         try
         {
             while (!stoppingToken.IsCancellationRequested)
@@ -40,7 +40,7 @@ public sealed partial class InboxEventsConsumer(
                 }
                 catch (ConsumeException ex) when (!ex.Error.IsFatal)
                 {
-                    LogConsumeFailed(logger, ex.Error.Reason, ex);
+                    LogConsumeFailed(logger, name, ex.Error.Reason, ex);
                     await Task.Delay(_retryDelay, stoppingToken).ConfigureAwait(false);
                     continue;
                 }
@@ -53,13 +53,12 @@ public sealed partial class InboxEventsConsumer(
                 try
                 {
                     await using var scope = scopes.CreateAsyncScope();
-                    await scope.ServiceProvider.GetRequiredService<InboxRecorder>()
-                        .HandleAsync(result.Message.Value, stoppingToken).ConfigureAwait(false);
+                    await handle(scope.ServiceProvider, result.Message.Value, stoppingToken).ConfigureAwait(false);
                     consumer.Commit(result);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    LogStoreFailed(logger, result.Topic, result.Offset.Value, ex);
+                    LogStoreFailed(logger, name, result.Topic, result.Offset.Value, ex);
                     consumer.Seek(result.TopicPartitionOffset);
                     await Task.Delay(_retryDelay, stoppingToken).ConfigureAwait(false);
                 }
@@ -74,9 +73,9 @@ public sealed partial class InboxEventsConsumer(
         }
     }
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "No se pudo leer de Kafka para el buzón ({Reason}); se reintentará.")]
-    private static partial void LogConsumeFailed(ILogger logger, string reason, Exception exception);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "No se pudo leer de Kafka para {Name} ({Reason}); se reintentará.")]
+    private static partial void LogConsumeFailed(ILogger logger, string name, string reason, Exception exception);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "No se pudo guardar la notificación de {Topic} offset {Offset}; se reintentará.")]
-    private static partial void LogStoreFailed(ILogger logger, string topic, long offset, Exception exception);
+    [LoggerMessage(Level = LogLevel.Error, Message = "{Name}: no se pudo guardar {Topic} offset {Offset}; se reintentará.")]
+    private static partial void LogStoreFailed(ILogger logger, string name, string topic, long offset, Exception exception);
 }

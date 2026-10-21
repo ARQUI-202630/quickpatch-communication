@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
+using QuickPatch.Communication.Application.Chat;
 using QuickPatch.Communication.Application.Inbox;
 using QuickPatch.Communication.Application.Realtime;
 
@@ -20,6 +21,9 @@ public static class DependencyInjection
         services.AddScoped<InboxRecorder>();
         services.AddScoped<ListNotificationsHandler>();
         services.AddScoped<MarkNotificationReadHandler>();
+        services.AddScoped<ChatParticipantsRecorder>();
+        services.AddScoped<ListChatMessagesHandler>();
+        services.AddScoped<SendChatMessageHandler>();
         return services;
     }
 }
