@@ -35,6 +35,17 @@ WebSocket `/v1/realtime`. Contrato: `contracts/api-gateway/asyncapi/realtime.v1.
 - **Roles:** `cliente`, `empresa_contacto`, `tecnico` y `admin_tenant`; los demás, `403`.
 - Sin `ConnectionStrings:Communication` (desarrollo local), el canal funciona igual y el buzón responde `503`.
 
+## Chat de la solicitud (ADR-026, SCRUM-480 y SCRUM-481)
+
+`GET` y `POST /v1/service-requests/{id}/messages` (`communication.v1.yaml` 1.3.0, gateway `v0.15.0`) y la trama `chat.message` del canal (`realtime.v1.yaml` 1.1.0). Tablas `chat_participants` y `chat_messages` en `db_communication` (DD 5.23 y 5.24).
+
+- **Participantes sin llamar a ServiceRequest:** un consumidor propio (`Kafka:ChatConsumerGroupId`, por defecto `communication-chat`) lee `service-request.status-changed` desde el principio y guarda, por solicitud, el cliente, el técnico asignado y el estado. Solo aplica un evento con `changedAt` más nuevo (RN-CH3).
+- **Quién:** solo el cliente dueño y el técnico asignado actual (RN-CH1). Otro usuario, otro tenant, el técnico anterior tras una reasignación o una solicitud que nunca tuvo técnico responden `404`. `admin_tenant`, `admin_plataforma` y `proveedor` reciben `403`.
+- **Cuándo:** se escribe en `asignado`, `cotizado`, `cotizacion_aceptada` y `en_progreso`. En `completado`, `pagado` y `cancelado` responde `409 chat-cerrado`, y sin técnico responde `409 chat-no-disponible` (RN-CH2). El historial se lee siempre, con `writable`.
+- **Entrega:** al guardar, el mensaje se envía por el canal al cliente y al técnico. Si la entrega falla, el mensaje igual queda guardado.
+- **Privacidad:** el texto (1 a 1.000 caracteres, sin adjuntos) no se escribe en logs ni en eventos (RN-CH4). `communication_app` puede insertar y leer mensajes, pero no editarlos ni borrarlos.
+- **Ruta:** la toma un `IngressRoute` de Traefik por el sufijo `/messages` (`deploy/k8s/communication.yaml`), igual que el pago en Payments.
+
 ## Configuración
 
 |Clave|Para qué|

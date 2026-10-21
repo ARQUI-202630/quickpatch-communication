@@ -3,9 +3,12 @@ using Confluent.Kafka;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
+using QuickPatch.Communication.Application.Chat;
 using QuickPatch.Communication.Application.Inbox;
+using QuickPatch.Communication.Application.Realtime;
 using QuickPatch.Communication.Infrastructure.Messaging;
 using QuickPatch.Communication.Infrastructure.Persistence;
 
@@ -33,11 +36,13 @@ public static class DependencyInjection
         {
             services.AddDbContext<CommunicationDbContext>(options => options.UseNpgsql(connectionString));
             services.AddScoped<IInboxStore, InboxStore>();
+            services.AddScoped<IChatStore, ChatStore>();
             services.AddHealthChecks().AddDbContextCheck<CommunicationDbContext>("postgresql", tags: [ReadyTag]);
         }
         else
         {
             services.AddSingleton<IInboxStore, UnavailableInboxStore>();
+            services.AddSingleton<IChatStore, UnavailableChatStore>();
         }
 
         var kafka = configuration.GetSection(KafkaOptions.Section).Get<KafkaOptions>() ?? new KafkaOptions();
@@ -55,20 +60,38 @@ public static class DependencyInjection
 
             if (inboxEnabled)
             {
-                // Consumidor propio: un IConsumer solo tiene una suscripción, y el buzón no puede perder eventos.
-                services.AddHostedService(sp => new InboxEventsConsumer(
-                    new ConsumerBuilder<string, string>(new ConsumerConfig
-                    {
-                        BootstrapServers = kafka.BootstrapServers,
-                        GroupId = kafka.InboxConsumerGroupId,
-                        EnableAutoCommit = false,
-                        AutoOffsetReset = AutoOffsetReset.Earliest,
-                    }).Build(),
-                    sp.GetRequiredService<IServiceScopeFactory>(),
-                    sp.GetRequiredService<ILogger<InboxEventsConsumer>>()));
+                // Consumidores propios: un IConsumer solo tiene una suscripción, y lo guardado no puede perder eventos. Se
+                // registran como IHostedService y no con AddHostedService: ese usa TryAddEnumerable, que con dos fábricas del
+                // mismo tipo descarta la segunda sin avisar.
+                services.AddSingleton<IHostedService>(sp => Persistent(
+                    sp, "buzón", kafka.InboxConsumerGroupId, EventTypes.Inbox,
+                    (scope, message, ct) => scope.GetRequiredService<InboxRecorder>().HandleAsync(message, ct)));
+
+                // Réplica de los participantes del chat (DD 5.23, ADR-026). Grupo aparte que lee desde el principio, para que
+                // al desplegarse conozca las solicitudes que ya tienen técnico.
+                services.AddSingleton<IHostedService>(sp => Persistent(
+                    sp, "chat", kafka.ChatConsumerGroupId, [EventTypes.ServiceRequestStatusChanged],
+                    (scope, message, ct) => scope.GetRequiredService<ChatParticipantsRecorder>().HandleAsync(message, ct)));
             }
         }
 
         return services;
+
+        PersistentEventsConsumer Persistent(
+            IServiceProvider sp, string name, string groupId, IReadOnlyList<string> topics,
+            Func<IServiceProvider, string, CancellationToken, Task> handle) =>
+            new(
+                name,
+                new ConsumerBuilder<string, string>(new ConsumerConfig
+                {
+                    BootstrapServers = kafka.BootstrapServers,
+                    GroupId = groupId,
+                    EnableAutoCommit = false,
+                    AutoOffsetReset = AutoOffsetReset.Earliest,
+                }).Build(),
+                topics,
+                handle,
+                sp.GetRequiredService<IServiceScopeFactory>(),
+                sp.GetRequiredService<ILogger<PersistentEventsConsumer>>());
     }
 }

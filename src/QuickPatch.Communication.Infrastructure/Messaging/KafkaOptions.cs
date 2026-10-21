@@ -12,5 +12,8 @@ public sealed class KafkaOptions
     /// <summary>Grupo propio del buzón: lee desde el principio y confirma después de guardar (DD 5.22).</summary>
     public string InboxConsumerGroupId { get; set; } = "communication-inbox";
 
+    /// <summary>Grupo de la réplica del chat: lee desde el principio y confirma después de guardar (DD 5.23).</summary>
+    public string ChatConsumerGroupId { get; set; } = "communication-chat";
+
     public bool Enabled => !string.IsNullOrWhiteSpace(BootstrapServers);
 }

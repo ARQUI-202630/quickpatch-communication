@@ -10,6 +10,12 @@ public static class Problems
     public const string Unauthorized = Base + "no-autenticado";
     public const string Forbidden = Base + "no-autorizado";
 
+    /// <summary>La solicitud se completó, se pagó o se canceló: el chat es de solo lectura (RN-CH2, contrato 1.3.0).</summary>
+    public const string ChatClosed = Base + "chat-cerrado";
+
+    /// <summary>La solicitud no tiene técnico asignado en este momento (RN-CH2, contrato 1.3.0).</summary>
+    public const string ChatNotAvailable = Base + "chat-no-disponible";
+
     /// <summary>Agrega <c>correlationId</c> y el tipo según el código a todo Problem Details que produzca el servicio.</summary>
     public static void Customize(ProblemDetailsContext context)
     {

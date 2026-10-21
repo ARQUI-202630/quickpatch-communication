@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 
+using QuickPatch.Communication.Api.Chat;
 using QuickPatch.Communication.Api.Http;
 using QuickPatch.Communication.Api.Inbox;
 using QuickPatch.Communication.Api.Realtime;
@@ -14,6 +15,7 @@ builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddRealtime(builder.Configuration);
 builder.Services.AddInboxApi(builder.Configuration);
+builder.Services.AddChatApi();
 
 var app = builder.Build();
 
@@ -33,6 +35,9 @@ app.MapRealtime();
 
 // Buzón de notificaciones (ADR-024; contrato openapi/communication.v1.yaml 1.0.0).
 app.MapInbox();
+
+// Chat de la solicitud (ADR-026; contrato openapi/communication.v1.yaml 1.3.0).
+app.MapChat();
 
 app.Run();
 

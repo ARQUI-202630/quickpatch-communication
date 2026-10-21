@@ -22,6 +22,87 @@ namespace QuickPatch.Communication.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("QuickPatch.Communication.Domain.Chat.ChatMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AuthorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("author_id");
+
+                    b.Property<string>("AuthorRole")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("author_role");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("body");
+
+                    b.Property<DateTimeOffset>("SentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sent_at");
+
+                    b.Property<Guid>("ServiceRequestId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("service_request_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ServiceRequestId");
+
+                    b.HasIndex("TenantId", "ServiceRequestId", "SentAt", "Id")
+                        .IsDescending(false, false, true, true)
+                        .HasDatabaseName("ix_chat_messages_history");
+
+                    b.ToTable("chat_messages", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_chat_messages_author_role", "author_role IN ('cliente', 'tecnico')");
+                        });
+                });
+
+            modelBuilder.Entity("QuickPatch.Communication.Domain.Chat.ChatParticipants", b =>
+                {
+                    b.Property<Guid>("ServiceRequestId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("service_request_id");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTimeOffset>("StatusChangedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("status_changed_at");
+
+                    b.Property<Guid?>("TechnicianId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("technician_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("ServiceRequestId");
+
+                    b.ToTable("chat_participants", (string)null);
+                });
+
             modelBuilder.Entity("QuickPatch.Communication.Domain.Inbox.Notification", b =>
                 {
                     b.Property<Guid>("Id")
@@ -88,6 +169,16 @@ namespace QuickPatch.Communication.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("ck_notifications_type", "type IN ('solicitud-creada', 'tecnico-asignado', 'solicitud-asignada', 'sin-tecnico-disponible', 'busqueda-reanudada', 'oferta-recibida', 'registro-recibido', 'verificacion-actualizada', 'solicitud-cancelada', 'cotizacion-recibida', 'cotizacion-aceptada', 'cotizacion-rechazada')");
                         });
+                });
+
+            modelBuilder.Entity("QuickPatch.Communication.Domain.Chat.ChatMessage", b =>
+                {
+                    b.HasOne("QuickPatch.Communication.Domain.Chat.ChatParticipants", null)
+                        .WithMany()
+                        .HasForeignKey("ServiceRequestId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_chat_messages_participants");
                 });
 #pragma warning restore 612, 618
         }
