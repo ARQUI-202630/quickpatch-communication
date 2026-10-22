@@ -77,10 +77,11 @@ spec:
             httpGet: { path: /health/live, port: http }
             initialDelaySeconds: 10
             periodSeconds: 20
-          # Pendiente de medición (Documento de Infraestructura, 5.6); límite inicial dentro del presupuesto de VM3.
+          # Medido en QA (22 oct 2026): unos 56 MiB en reposo y unos 330 MiB al ponerse al día con un lag grande de los
+          # consumidores del buzón y del chat, que con 256 MiB terminaba en OOMKilled (Documento de Infraestructura, 5.6).
           resources:
             requests: { cpu: 50m, memory: 128Mi }
-            limits: { cpu: 500m, memory: 256Mi }
+            limits: { cpu: 500m, memory: 512Mi }
           securityContext:
             allowPrivilegeEscalation: false
 ---
