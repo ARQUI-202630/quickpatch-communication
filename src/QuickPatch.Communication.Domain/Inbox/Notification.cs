@@ -58,8 +58,8 @@ public sealed class Notification
         Message = message;
         ServiceRequestId = serviceRequestId;
         SourceEventId = sourceEventId;
-        CreatedAt = createdAt;
-        ReadAt = readAt;
+        CreatedAt = ToMicroseconds(createdAt);
+        ReadAt = readAt is null ? null : ToMicroseconds(readAt.Value);
     }
 
     public Guid Id { get; }
@@ -85,5 +85,12 @@ public sealed class Notification
     public DateTimeOffset? ReadAt { get; private set; }
 
     /// <summary>Idempotente: si ya estaba leída conserva el <c>readAt</c> original (contrato 1.0.0).</summary>
-    public void MarkRead(DateTimeOffset now) => ReadAt ??= now;
+    public void MarkRead(DateTimeOffset now) => ReadAt ??= ToMicroseconds(now);
+
+    /// <summary>
+    /// PostgreSQL guarda microsegundos y .NET trabaja con décimas de microsegundo. Sin truncar, la primera respuesta de
+    /// <c>POST /v1/notifications/{id}/read</c> llevaba 7 decimales y las siguientes, ya leídas de la base, 6: el mismo
+    /// <c>readAt</c> se veía distinto (SCRUM-458).
+    /// </summary>
+    private static DateTimeOffset ToMicroseconds(DateTimeOffset value) => new(value.Ticks - (value.Ticks % 10), value.Offset);
 }
