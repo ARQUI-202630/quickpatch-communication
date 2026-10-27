@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 
-namespace QuickPatch.Communication.UnitTests.Realtime;
+namespace QuickPatch.Communication.UnitTests.Support;
 
 /// <summary>Llaves y tokens de prueba, como los emitiría Identity (RS256, ADR-018).</summary>
 internal static class TestTokens

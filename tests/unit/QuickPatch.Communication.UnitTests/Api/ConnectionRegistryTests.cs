@@ -3,7 +3,7 @@ using System.Text.Json;
 using QuickPatch.Communication.Api.Realtime;
 using QuickPatch.Communication.Domain.Realtime;
 
-namespace QuickPatch.Communication.UnitTests.Realtime;
+namespace QuickPatch.Communication.UnitTests.Api;
 
 public class ConnectionRegistryTests
 {

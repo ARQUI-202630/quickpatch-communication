@@ -7,11 +7,12 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 
+using QuickPatch.Communication.Application.Abstractions;
 using QuickPatch.Communication.Application.Inbox;
 using QuickPatch.Communication.Domain.Inbox;
-using QuickPatch.Communication.UnitTests.Realtime;
+using QuickPatch.Communication.UnitTests.Support;
 
-namespace QuickPatch.Communication.UnitTests.Inbox;
+namespace QuickPatch.Communication.UnitTests.Api;
 
 /// <summary>API del buzón (<c>communication.v1.yaml</c> 1.0.0) con el almacenamiento en memoria.</summary>
 public sealed class InboxApiTests : IClassFixture<InboxApiTests.Factory>

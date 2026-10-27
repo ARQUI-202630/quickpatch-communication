@@ -1,8 +1,10 @@
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
+using QuickPatch.Communication.Api.Realtime;
+using QuickPatch.Communication.Application.Abstractions;
 using QuickPatch.Communication.Application.Realtime;
 
-namespace QuickPatch.Communication.Api.Realtime;
+namespace QuickPatch.Communication.Api.Endpoints;
 
 public static class RealtimeEndpoints
 {

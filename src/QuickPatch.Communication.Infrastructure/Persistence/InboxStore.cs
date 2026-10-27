@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 
+using QuickPatch.Communication.Application.Abstractions;
 using QuickPatch.Communication.Application.Inbox;
 using QuickPatch.Communication.Domain.Inbox;
 

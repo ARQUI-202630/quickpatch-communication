@@ -3,11 +3,12 @@ using System.Security.Claims;
 using System.Text.Json;
 
 using QuickPatch.Communication.Api.Http;
+using QuickPatch.Communication.Application.Abstractions;
 using QuickPatch.Communication.Application.Chat;
 using QuickPatch.Communication.Domain.Chat;
 using QuickPatch.Communication.Domain.Realtime;
 
-namespace QuickPatch.Communication.Api.Chat;
+namespace QuickPatch.Communication.Api.Endpoints;
 
 /// <summary>Esquema <c>ChatMessage</c> de <c>communication.v1.yaml</c> 1.3.0.</summary>
 public sealed record ChatMessageResponse(Guid Id, Guid AuthorId, string AuthorRole, string Text, DateTimeOffset SentAt)

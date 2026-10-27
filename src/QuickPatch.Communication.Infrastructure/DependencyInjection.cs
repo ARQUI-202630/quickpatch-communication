@@ -6,7 +6,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
+using QuickPatch.Communication.Application.Abstractions;
 using QuickPatch.Communication.Application.Chat;
+using QuickPatch.Communication.Application.Events;
 using QuickPatch.Communication.Application.Inbox;
 using QuickPatch.Communication.Application.Realtime;
 using QuickPatch.Communication.Infrastructure.Messaging;

@@ -6,8 +6,9 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 
 using QuickPatch.Communication.Api.Realtime;
+using QuickPatch.Communication.UnitTests.Support;
 
-namespace QuickPatch.Communication.UnitTests.Realtime;
+namespace QuickPatch.Communication.UnitTests.Api;
 
 /// <summary>
 /// Códigos de cierre por plazo con Kestrel real (SCRUM-469). El servidor en memoria no aborta el socket al cancelar una

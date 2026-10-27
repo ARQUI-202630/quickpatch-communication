@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 
+using QuickPatch.Communication.Application.Events;
 using QuickPatch.Communication.Application.Realtime;
 using QuickPatch.Communication.Domain.Inbox;
 

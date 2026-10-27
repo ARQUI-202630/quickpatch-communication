@@ -9,9 +9,11 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 
 using QuickPatch.Communication.Api.Realtime;
+using QuickPatch.Communication.Application.Events;
 using QuickPatch.Communication.Application.Realtime;
+using QuickPatch.Communication.UnitTests.Support;
 
-namespace QuickPatch.Communication.UnitTests.Realtime;
+namespace QuickPatch.Communication.UnitTests.Api;
 
 /// <summary>
 /// Pruebas del canal <c>/v1/realtime</c> con un cliente WebSocket real contra el servicio en memoria, según

@@ -1,6 +1,6 @@
 using QuickPatch.Communication.Domain.Inbox;
 
-namespace QuickPatch.Communication.UnitTests.Inbox;
+namespace QuickPatch.Communication.UnitTests.Domain;
 
 public class NotificationTests
 {

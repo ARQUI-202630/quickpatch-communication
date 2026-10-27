@@ -1,7 +1,8 @@
 using QuickPatch.Communication.Application.Inbox;
 using QuickPatch.Communication.Domain.Inbox;
+using QuickPatch.Communication.UnitTests.Support;
 
-namespace QuickPatch.Communication.UnitTests.Inbox;
+namespace QuickPatch.Communication.UnitTests.Application;
 
 public class InboxHandlersTests
 {

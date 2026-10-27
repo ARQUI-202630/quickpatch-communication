@@ -5,6 +5,7 @@ using System.Text.Json;
 
 using Microsoft.Extensions.Options;
 
+using QuickPatch.Communication.Application.Events;
 using QuickPatch.Communication.Application.Realtime;
 using QuickPatch.Communication.Domain.Realtime;
 

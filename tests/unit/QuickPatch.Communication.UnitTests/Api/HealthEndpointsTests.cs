@@ -2,7 +2,7 @@ using System.Net;
 
 using Microsoft.AspNetCore.Mvc.Testing;
 
-namespace QuickPatch.Communication.UnitTests;
+namespace QuickPatch.Communication.UnitTests.Api;
 
 public class HealthEndpointsTests(WebApplicationFactory<Program> factory) : IClassFixture<WebApplicationFactory<Program>>
 {
