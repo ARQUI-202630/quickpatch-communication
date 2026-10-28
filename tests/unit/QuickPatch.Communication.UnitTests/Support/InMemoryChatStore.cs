@@ -1,7 +1,8 @@
+using QuickPatch.Communication.Application.Abstractions;
 using QuickPatch.Communication.Application.Chat;
 using QuickPatch.Communication.Domain.Chat;
 
-namespace QuickPatch.Communication.UnitTests.Chat;
+namespace QuickPatch.Communication.UnitTests.Support;
 
 /// <summary>
 /// Chat en memoria que se comporta como las tablas reales: cada consulta solo ve las filas del tenant pedido (como RLS) y

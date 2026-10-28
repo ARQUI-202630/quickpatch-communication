@@ -3,12 +3,13 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 using QuickPatch.Communication.Application;
+using QuickPatch.Communication.Application.Abstractions;
 using QuickPatch.Communication.Application.Realtime;
 using QuickPatch.Communication.Domain.Realtime;
 using QuickPatch.Communication.Infrastructure;
 using QuickPatch.Communication.Infrastructure.Messaging;
 
-namespace QuickPatch.Communication.UnitTests;
+namespace QuickPatch.Communication.UnitTests.Infrastructure;
 
 public class DependencyInjectionTests
 {

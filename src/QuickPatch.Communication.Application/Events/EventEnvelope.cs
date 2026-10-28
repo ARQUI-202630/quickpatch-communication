@@ -1,7 +1,10 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace QuickPatch.Communication.Application.Realtime;
+namespace QuickPatch.Communication.Application.Events;
+
+/// <summary>El evento no cumple su contrato: se registra y se descarta, sin reintentar.</summary>
+public sealed class InvalidEventException(string message) : Exception(message);
 
 /// <summary>Sobre común de los eventos de Kafka (DD 8.4.1). <c>Data</c> se lee según <c>EventType</c>.</summary>
 public sealed record EventEnvelope(

@@ -7,11 +7,12 @@ using Microsoft.IdentityModel.Tokens;
 
 using QuickPatch.Communication.Api.Http;
 using QuickPatch.Communication.Api.Realtime;
+using QuickPatch.Communication.Application.Abstractions;
 using QuickPatch.Communication.Application.Inbox;
 using QuickPatch.Communication.Domain.Inbox;
 using QuickPatch.Communication.Domain.Realtime;
 
-namespace QuickPatch.Communication.Api.Inbox;
+namespace QuickPatch.Communication.Api.Endpoints;
 
 /// <summary>Esquema <c>Notification</c> de <c>communication.v1.yaml</c> 1.0.0.</summary>
 public sealed record NotificationResponse(

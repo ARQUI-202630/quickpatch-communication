@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 
+using QuickPatch.Communication.Application.Events;
 using QuickPatch.Communication.Application.Realtime;
 
 using Testcontainers.Kafka;

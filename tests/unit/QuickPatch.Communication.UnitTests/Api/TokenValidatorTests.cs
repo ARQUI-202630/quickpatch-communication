@@ -4,8 +4,9 @@ using Microsoft.Extensions.Options;
 
 using QuickPatch.Communication.Api.Realtime;
 using QuickPatch.Communication.Domain.Realtime;
+using QuickPatch.Communication.UnitTests.Support;
 
-namespace QuickPatch.Communication.UnitTests.Realtime;
+namespace QuickPatch.Communication.UnitTests.Api;
 
 public sealed class TokenValidatorTests
 {

@@ -9,11 +9,12 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 
+using QuickPatch.Communication.Application.Abstractions;
 using QuickPatch.Communication.Application.Chat;
 using QuickPatch.Communication.Domain.Chat;
-using QuickPatch.Communication.UnitTests.Realtime;
+using QuickPatch.Communication.UnitTests.Support;
 
-namespace QuickPatch.Communication.UnitTests.Chat;
+namespace QuickPatch.Communication.UnitTests.Api;
 
 /// <summary>API del chat (<c>communication.v1.yaml</c> 1.3.0) con el almacenamiento en memoria.</summary>
 public sealed class ChatApiTests : IClassFixture<ChatApiTests.Factory>

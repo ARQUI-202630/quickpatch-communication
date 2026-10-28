@@ -1,7 +1,9 @@
+using QuickPatch.Communication.Application.Abstractions;
+using QuickPatch.Communication.Application.Events;
 using QuickPatch.Communication.Application.Inbox;
 using QuickPatch.Communication.Domain.Inbox;
 
-namespace QuickPatch.Communication.UnitTests.Inbox;
+namespace QuickPatch.Communication.UnitTests.Support;
 
 /// <summary>
 /// Buzón en memoria que se comporta como la tabla real: <c>UNIQUE (source_event_id, user_id)</c> y cada consulta solo ve
@@ -89,7 +91,7 @@ internal static class Events
             data,
         });
 
-    public static QuickPatch.Communication.Application.Realtime.EventEnvelope Envelope(string type, object data, Guid? tenant = null) =>
-        System.Text.Json.JsonSerializer.Deserialize<QuickPatch.Communication.Application.Realtime.EventEnvelope>(
-            Json(type, tenant ?? Guid.NewGuid(), data), QuickPatch.Communication.Application.Realtime.RealtimeJson.Options)!;
+    public static QuickPatch.Communication.Application.Events.EventEnvelope Envelope(string type, object data, Guid? tenant = null) =>
+        System.Text.Json.JsonSerializer.Deserialize<QuickPatch.Communication.Application.Events.EventEnvelope>(
+            Json(type, tenant ?? Guid.NewGuid(), data), QuickPatch.Communication.Application.Events.RealtimeJson.Options)!;
 }

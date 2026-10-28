@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 
+using QuickPatch.Communication.Application.Abstractions;
 using QuickPatch.Communication.Application.Chat;
 using QuickPatch.Communication.Domain.Chat;
 

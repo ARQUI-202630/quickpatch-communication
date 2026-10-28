@@ -1,8 +1,10 @@
+using QuickPatch.Communication.Application.Events;
 using QuickPatch.Communication.Application.Inbox;
 using QuickPatch.Communication.Application.Realtime;
 using QuickPatch.Communication.Domain.Inbox;
+using QuickPatch.Communication.UnitTests.Support;
 
-namespace QuickPatch.Communication.UnitTests.Inbox;
+namespace QuickPatch.Communication.UnitTests.Application;
 
 /// <summary>Tabla de tipos de <c>communication.v1.yaml</c> 1.2.0 (DD 8.2.6): qué crea cada evento y para quién.</summary>
 public class InboxRulesTests

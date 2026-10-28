@@ -2,13 +2,16 @@ using System.Text.Json;
 
 using Microsoft.Extensions.Logging.Abstractions;
 
+using QuickPatch.Communication.Application.Abstractions;
 using QuickPatch.Communication.Application.Chat;
+using QuickPatch.Communication.Application.Events;
 using QuickPatch.Communication.Application.Inbox;
 using QuickPatch.Communication.Application.Realtime;
 using QuickPatch.Communication.Domain.Chat;
 using QuickPatch.Communication.Domain.Realtime;
+using QuickPatch.Communication.UnitTests.Support;
 
-namespace QuickPatch.Communication.UnitTests.Chat;
+namespace QuickPatch.Communication.UnitTests.Application;
 
 /// <summary>Chat de la solicitud (RF-37, ADR-026): réplica de participantes, reglas RN-CH1 a RN-CH4 y entrega por el canal.</summary>
 public class ChatTests

@@ -3,6 +3,7 @@ using Confluent.Kafka;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
+using QuickPatch.Communication.Application.Events;
 using QuickPatch.Communication.Application.Realtime;
 
 namespace QuickPatch.Communication.Infrastructure.Messaging;

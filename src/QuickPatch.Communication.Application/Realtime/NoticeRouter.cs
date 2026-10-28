@@ -1,11 +1,9 @@
 using System.Text.Json;
 
+using QuickPatch.Communication.Application.Events;
 using QuickPatch.Communication.Domain.Realtime;
 
 namespace QuickPatch.Communication.Application.Realtime;
-
-/// <summary>El evento no cumple su contrato: se registra y se descarta, sin reintentar.</summary>
-public sealed class InvalidEventException(string message) : Exception(message);
 
 /// <summary>
 /// Decide a quién avisar por cada evento (DD 8.5, Cuadro de avisos). Solo usa el contenido del evento: los eventos

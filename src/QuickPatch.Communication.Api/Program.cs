@@ -1,9 +1,7 @@
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 
-using QuickPatch.Communication.Api.Chat;
+using QuickPatch.Communication.Api.Endpoints;
 using QuickPatch.Communication.Api.Http;
-using QuickPatch.Communication.Api.Inbox;
-using QuickPatch.Communication.Api.Realtime;
 using QuickPatch.Communication.Application;
 using QuickPatch.Communication.Infrastructure;
 

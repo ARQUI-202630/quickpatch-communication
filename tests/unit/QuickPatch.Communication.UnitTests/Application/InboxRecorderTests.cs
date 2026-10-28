@@ -1,10 +1,12 @@
 using Microsoft.Extensions.Logging.Abstractions;
 
+using QuickPatch.Communication.Application.Events;
 using QuickPatch.Communication.Application.Inbox;
 using QuickPatch.Communication.Application.Realtime;
 using QuickPatch.Communication.Domain.Inbox;
+using QuickPatch.Communication.UnitTests.Support;
 
-namespace QuickPatch.Communication.UnitTests.Inbox;
+namespace QuickPatch.Communication.UnitTests.Application;
 
 public class InboxRecorderTests
 {

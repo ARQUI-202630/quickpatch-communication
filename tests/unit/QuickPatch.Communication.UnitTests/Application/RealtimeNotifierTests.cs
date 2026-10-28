@@ -2,10 +2,12 @@ using System.Text.Json;
 
 using Microsoft.Extensions.Logging.Abstractions;
 
+using QuickPatch.Communication.Application.Abstractions;
+using QuickPatch.Communication.Application.Events;
 using QuickPatch.Communication.Application.Realtime;
 using QuickPatch.Communication.Domain.Realtime;
 
-namespace QuickPatch.Communication.UnitTests.Realtime;
+namespace QuickPatch.Communication.UnitTests.Application;
 
 public class RealtimeNotifierTests
 {

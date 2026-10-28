@@ -11,6 +11,7 @@ using Microsoft.EntityFrameworkCore;
 
 using Npgsql;
 
+using QuickPatch.Communication.Application.Events;
 using QuickPatch.Communication.Application.Realtime;
 using QuickPatch.Communication.Infrastructure.Persistence;
 
