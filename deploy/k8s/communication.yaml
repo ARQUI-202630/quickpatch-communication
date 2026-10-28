@@ -70,13 +70,17 @@ spec:
               valueFrom: { secretKeyRef: { name: communication-secretos, key: app-connection } }
             - name: Jwt__PublicKeyPem
               valueFrom: { secretKeyRef: { name: communication-secretos, key: jwt-public-key } }
+          # timeoutSeconds: sin él Kubernetes espera 1 s; bajo carga en QA (28 oct 2026, k6) las sondas daban
+          # «context deadline exceeded» y el liveness reiniciaba el pod tras 3 fallos seguidos (SCRUM-515).
           readinessProbe:
             httpGet: { path: /health/ready, port: http }
             periodSeconds: 10
+            timeoutSeconds: 3
           livenessProbe:
             httpGet: { path: /health/live, port: http }
             initialDelaySeconds: 10
             periodSeconds: 20
+            timeoutSeconds: 3
           # Medido en QA (22 oct 2026): unos 56 MiB en reposo y unos 330 MiB al ponerse al día con un lag grande de los
           # consumidores del buzón y del chat, que con 256 MiB terminaba en OOMKilled (Documento de Infraestructura, 5.6).
           resources:
