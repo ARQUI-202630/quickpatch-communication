@@ -1,0 +1,135 @@
+# Despliegue de Communication en k3s (namespace quickpatch), igual en QA y producción.
+# Primer despliegue: crear el Secret communication-secretos (deploy/k8s/README.md), reemplazar <vm-mensajeria> por la IP de
+# Kafka del ambiente y aplicar este archivo con `kubectl apply -f deploy/k8s/communication.yaml`.
+# Después, el pipeline actualiza la imagen con `kubectl set image deployment/communication "*=<imagen>"`.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: communication-config
+  namespace: quickpatch
+  labels: { app: communication }
+data:
+  Jwt__Issuer: "quickpatch-identity"
+  Jwt__Audience: "quickpatch"
+  Kafka__BootstrapServers: "<vm-mensajeria>:9092"
+  Kafka__ConsumerGroupId: "communication-service"
+  # Grupo propio del buzón (DD 5.22): lee desde el principio y confirma después de guardar.
+  Kafka__InboxConsumerGroupId: "communication-inbox"
+  Realtime__AuthTimeoutSeconds: "10"
+  Realtime__MaxFrameBytes: "8192"
+  Realtime__KeepAliveSeconds: "30"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: communication
+  namespace: quickpatch
+  labels: { app: communication }
+spec:
+  # Una réplica: las conexiones del canal en tiempo real viven en memoria (ADR-023, punto 6). Con más réplicas cada
+  # una tendría que recibir todos los eventos (grupos de consumidores distintos) o repartirlos con Redis pub/sub.
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels: { app: communication }
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  template:
+    metadata:
+      labels: { app: communication }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        # La imagen declara USER app (por nombre); Kubernetes necesita el UID para verificar que no es root.
+        runAsUser: 1654
+        runAsGroup: 1654
+      initContainers:
+        # Migraciones del buzón (EF Core bundle) con el rol communication_migrator, dueño de las tablas (DD 10.1).
+        - name: migraciones
+          image: ghcr.io/arqui-202630/quickpatch-communication:pendiente
+          command: ["/app/efbundle", "--connection", "$(MIGRATOR_CONNECTION)"]
+          env:
+            - name: MIGRATOR_CONNECTION
+              valueFrom: { secretKeyRef: { name: communication-secretos, key: migrator-connection } }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+      # Al detenerse, el servicio cierra los WebSocket con 1001 para que las apps se reconecten al pod nuevo.
+      terminationGracePeriodSeconds: 20
+      containers:
+        - name: communication
+          image: ghcr.io/arqui-202630/quickpatch-communication:pendiente
+          ports:
+            - { name: http, containerPort: 8080 }
+          envFrom:
+            - configMapRef: { name: communication-config }
+          env:
+            # Base propia db_communication (buzón de notificaciones, ADR-024). La conexión es del rol communication_app, sujeto a RLS.
+            - name: ConnectionStrings__Communication
+              valueFrom: { secretKeyRef: { name: communication-secretos, key: app-connection } }
+            - name: Jwt__PublicKeyPem
+              valueFrom: { secretKeyRef: { name: communication-secretos, key: jwt-public-key } }
+          # timeoutSeconds: sin él Kubernetes espera 1 s; bajo carga en QA (28 oct 2026, k6) las sondas daban
+          # «context deadline exceeded» y el liveness reiniciaba el pod tras 3 fallos seguidos (SCRUM-515).
+          readinessProbe:
+            httpGet: { path: /health/ready, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet: { path: /health/live, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 3
+          # Medido en QA (22 oct 2026): unos 56 MiB en reposo y unos 330 MiB al ponerse al día con un lag grande de los
+          # consumidores del buzón y del chat, que con 256 MiB terminaba en OOMKilled (Documento de Infraestructura, 5.6).
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: communication
+  namespace: quickpatch
+  labels: { app: communication }
+spec:
+  selector: { app: communication }
+  ports:
+    - { name: http, port: 8080, targetPort: http }
+---
+# El gateway quita /api y reenvía a Traefik (NodePort 30080); Traefik elige el servicio por la ruta del contrato y
+# admite WebSocket sin configuración adicional (ADR-023). Los tiempos de las conexiones largas se ajustan en el Nginx
+# de VM1 (proxy_read_timeout), no aquí.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: communication
+  namespace: quickpatch
+spec:
+  rules:
+    - http:
+        paths:
+          - { path: /v1/realtime, pathType: Exact, backend: { service: { name: communication, port: { name: http } } } }
+          - { path: /v1/notifications, pathType: Prefix, backend: { service: { name: communication, port: { name: http } } } }
+---
+# Chat de la solicitud (communication.v1.yaml 1.3.0, ADR-026; excepción de ADR-025). La ruta empieza por
+# /v1/service-requests, que es de ServiceRequest: este IngressRoute la toma por el sufijo /messages con más prioridad que el
+# prefijo de ServiceRequest, igual que el pago en Payments. Sintaxis de reglas de Traefik v2 (k3s v1.31 trae Traefik 2.11);
+# con Traefik v3 la regla pasa a PathRegexp(`^/v1/service-requests/[0-9a-fA-F-]{36}/messages$`).
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: communication-chat
+  namespace: quickpatch
+spec:
+  entryPoints: [web]
+  routes:
+    - kind: Rule
+      match: Path(`/v1/service-requests/{id:[0-9a-fA-F-]{36}}/messages`)
+      priority: 100
+      services:
+        - name: communication
+          port: http
