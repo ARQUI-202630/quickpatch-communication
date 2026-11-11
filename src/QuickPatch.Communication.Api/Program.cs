@@ -4,6 +4,7 @@ using QuickPatch.Communication.Api.Endpoints;
 using QuickPatch.Communication.Api.Http;
 using QuickPatch.Communication.Application;
 using QuickPatch.Communication.Infrastructure;
+using QuickPatch.Transversal.Http;
 
 var builder = WebApplication.CreateBuilder(args);
 

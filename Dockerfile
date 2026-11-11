@@ -3,6 +3,8 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 COPY global.json Directory.Build.props .editorconfig dotnet-tools.json ./
 COPY src/ src/
+# Código transversal compartido (ADR-020), submódulo quickpatch-shared-dotnet.
+COPY shared/ shared/
 RUN dotnet publish "src/QuickPatch.Communication.Api/QuickPatch.Communication.Api.csproj" -c Release -o /app/publish
 # Migraciones empaquetadas (EF Core migration bundle): el init container del despliegue las aplica con el rol
 # communication_migrator antes de arrancar el servicio (deploy/k8s/communication.yaml).
