@@ -1,6 +1,7 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <ProjectReference Include="..\..\shared\dotnet\src\QuickPatch.Transversal.Messaging\QuickPatch.Transversal.Messaging.csproj" />
     <ProjectReference Include="..\QuickPatch.Communication.Application\QuickPatch.Communication.Application.csproj" />
     <ProjectReference Include="..\QuickPatch.Communication.Domain\QuickPatch.Communication.Domain.csproj" />
   </ItemGroup>
