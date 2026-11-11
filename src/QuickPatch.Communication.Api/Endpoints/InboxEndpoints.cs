@@ -1,9 +1,7 @@
 using System.Globalization;
 using System.Security.Claims;
-using System.Security.Cryptography;
 
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
 
 using QuickPatch.Communication.Api.Http;
 using QuickPatch.Communication.Api.Realtime;
@@ -11,6 +9,7 @@ using QuickPatch.Communication.Application.Abstractions;
 using QuickPatch.Communication.Application.Inbox;
 using QuickPatch.Communication.Domain.Inbox;
 using QuickPatch.Communication.Domain.Realtime;
+using QuickPatch.Transversal.Security;
 
 namespace QuickPatch.Communication.Api.Endpoints;
 
@@ -37,22 +36,7 @@ public static class InboxEndpoints
     public static IServiceCollection AddInboxApi(this IServiceCollection services, IConfiguration configuration)
     {
         var settings = configuration.GetSection(JwtSettings.Section).Get<JwtSettings>() ?? new JwtSettings();
-        services
-            .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-            .AddJwtBearer(options =>
-            {
-                options.MapInboundClaims = false;
-                options.TokenValidationParameters = new TokenValidationParameters
-                {
-                    ValidIssuer = settings.Issuer,
-                    ValidAudience = settings.Audience,
-                    IssuerSigningKey = LoadPublicKey(settings.PublicKeyPem),
-                    ValidAlgorithms = [SecurityAlgorithms.RsaSha256],
-                    NameClaimType = "sub",
-                    RoleClaimType = "role",
-                    ClockSkew = TimeSpan.Zero,
-                };
-            });
+        services.AddQuickPatchJwtBearer(settings, TimeSpan.Zero);
 
         // Los mismos roles que usan el canal en tiempo real: cliente, empresa_contacto, técnico y admin_tenant.
         services.AddAuthorizationBuilder().AddPolicy(InboxPolicy, policy => policy.RequireRole(
@@ -163,19 +147,4 @@ public static class InboxEndpoints
             errors.ToDictionary(e => e.Key, e => e.Value),
             title: "La solicitud tiene datos inválidos",
             type: Problems.Validation);
-
-    private static RsaSecurityKey? LoadPublicKey(string pem)
-    {
-        if (string.IsNullOrWhiteSpace(pem))
-        {
-            // Sin llave no se valida ningún token: el buzón responde 401 (falla cerrado), igual que el canal.
-            return null;
-        }
-
-#pragma warning disable CA2000 // La llave vive lo que vive la aplicación.
-        var rsa = RSA.Create();
-#pragma warning restore CA2000
-        rsa.ImportFromPem(pem);
-        return new RsaSecurityKey(rsa);
-    }
 }
