@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using QuickPatch.Communication.Api.Realtime;
 using QuickPatch.Communication.Domain.Realtime;
 using QuickPatch.Communication.UnitTests.Support;
+using QuickPatch.Transversal.Security;
 
 namespace QuickPatch.Communication.UnitTests.Api;
 

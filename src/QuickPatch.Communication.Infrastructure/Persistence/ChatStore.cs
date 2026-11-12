@@ -3,11 +3,12 @@ using Microsoft.EntityFrameworkCore;
 using QuickPatch.Communication.Application.Abstractions;
 using QuickPatch.Communication.Application.Chat;
 using QuickPatch.Communication.Domain.Chat;
+using QuickPatch.Transversal.Persistence;
 
 namespace QuickPatch.Communication.Infrastructure.Persistence;
 
 /// <summary>
-/// Chat en PostgreSQL (DD 5.23 y 5.24, ADR-026). Cada operación abre una transacción y fija <c>app.current_tenant</c> con
+/// Chat en PostgreSQL (DD 5.23 y 5.24, ADR-026). Cada operación usa la transacción por tenant común (ADR-020), que fija <c>app.current_tenant</c> con
 /// <c>set_config(..., true)</c>: RLS deja ver y escribir solo las filas de ese tenant.
 /// </summary>
 public sealed class ChatStore(CommunicationDbContext db) : IChatStore
@@ -16,7 +17,7 @@ public sealed class ChatStore(CommunicationDbContext db) : IChatStore
     {
         ArgumentNullException.ThrowIfNull(participants);
         var p = participants;
-        return InTenantAsync(p.TenantId, async ct =>
+        return TenantTransaction.ExecuteAsync(db, p.TenantId, async ct =>
         {
             // RN-CH3: solo un evento más nuevo cambia la fila; uno viejo o repetido no hace nada.
             var changed = await db.Database.ExecuteSqlAsync(
@@ -34,11 +35,11 @@ public sealed class ChatStore(CommunicationDbContext db) : IChatStore
     }
 
     public Task<ChatParticipants?> FindAsync(Guid tenantId, Guid serviceRequestId, CancellationToken cancellationToken) =>
-        InTenantAsync(tenantId, ct => db.ChatParticipants.AsNoTracking()
+        TenantTransaction.ExecuteAsync(db, tenantId, ct => db.ChatParticipants.AsNoTracking()
             .SingleOrDefaultAsync(x => x.ServiceRequestId == serviceRequestId && x.TenantId == tenantId, ct), cancellationToken);
 
     public Task<ChatMessagePage> ListAsync(Guid tenantId, Guid serviceRequestId, int skip, int take, CancellationToken cancellationToken) =>
-        InTenantAsync(tenantId, async ct =>
+        TenantTransaction.ExecuteAsync(db, tenantId, async ct =>
         {
             var messages = db.ChatMessages.AsNoTracking()
                 .Where(x => x.TenantId == tenantId && x.ServiceRequestId == serviceRequestId);
@@ -55,29 +56,11 @@ public sealed class ChatStore(CommunicationDbContext db) : IChatStore
     public Task AddAsync(ChatMessage message, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(message);
-        return InTenantAsync(message.TenantId, _ =>
+        return TenantTransaction.ExecuteAsync(db, message.TenantId, _ =>
         {
             db.ChatMessages.Add(message);
             return Task.FromResult(true);
         }, cancellationToken);
-    }
-
-    private async Task<T> InTenantAsync<T>(Guid tenantId, Func<CancellationToken, Task<T>> work, CancellationToken cancellationToken)
-    {
-        if (tenantId == Guid.Empty)
-        {
-            throw new ArgumentException("El tenant es obligatorio.", nameof(tenantId));
-        }
-
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var tenant = tenantId.ToString();
-        await db.Database.ExecuteSqlAsync($"SELECT set_config('app.current_tenant', {tenant}, true)", cancellationToken);
-
-        var result = await work(cancellationToken);
-
-        await db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return result;
     }
 }
 

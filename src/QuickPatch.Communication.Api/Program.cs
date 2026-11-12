@@ -8,6 +8,9 @@ using QuickPatch.Transversal.Http;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Logs en JSON con scopes (ADR-020): cada línea lleva su correlationId.
+builder.Logging.AddQuickPatchJsonConsole();
+
 builder.Services.AddProblemDetails(options => options.CustomizeProblemDetails = Problems.Customize);
 builder.Services.AddHealthChecks();
 builder.Services.AddApplication();
