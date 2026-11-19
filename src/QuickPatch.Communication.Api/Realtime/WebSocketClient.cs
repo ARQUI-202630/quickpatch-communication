@@ -40,7 +40,7 @@ public sealed class WebSocketClient(WebSocket socket, RealtimeUser user) : IReal
         await _sendLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            await RealtimeSession.CloseQuietlyAsync(socket, code, reason, cancellationToken).ConfigureAwait(false);
+            await WebSocketFrames.CloseQuietlyAsync(socket, code, reason, cancellationToken).ConfigureAwait(false);
         }
         finally
         {

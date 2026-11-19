@@ -1,6 +1,4 @@
-using System.Buffers;
 using System.Net.WebSockets;
-using System.Text;
 using System.Text.Json;
 
 using Microsoft.Extensions.Options;
@@ -26,14 +24,6 @@ public sealed partial class RealtimeSession(
     /// <summary>Cuánto se espera la trama de cierre de la app después de cerrar por un plazo.</summary>
     internal static readonly TimeSpan CloseReplyTimeout = TimeSpan.FromSeconds(5);
 
-    private enum FrameKind
-    {
-        Text,
-        Closed,
-        TooBig,
-        NotText,
-    }
-
     public async Task RunAsync(WebSocket socket, CancellationToken aborted)
     {
         ArgumentNullException.ThrowIfNull(socket);
@@ -41,32 +31,32 @@ public sealed partial class RealtimeSession(
 
         // 1. Primera trama, con plazo. El plazo no cancela la lectura: en Kestrel, cancelar ReceiveAsync aborta el socket
         // y la app recibiría un cierre sin código en lugar de 4002 (SCRUM-469).
-        var firstRead = ReadFrameAsync(socket, settings.MaxFrameBytes, aborted);
+        var firstRead = WebSocketFrames.ReadAsync(socket, settings.MaxFrameBytes, aborted);
         if (!await CompletesWithinAsync(firstRead, TimeSpan.FromSeconds(settings.AuthTimeoutSeconds), aborted).ConfigureAwait(false))
         {
-            await CloseQuietlyAsync(socket, CloseCodes.NoAuthentication, "sin-autenticacion", aborted).ConfigureAwait(false);
+            await WebSocketFrames.CloseQuietlyAsync(socket, CloseCodes.NoAuthentication, "sin-autenticacion", aborted).ConfigureAwait(false);
             LogClosed(logger, CloseCodes.NoAuthentication);
             await AwaitCloseReplyAsync(firstRead).ConfigureAwait(false);
             return;
         }
 
         var first = await firstRead.ConfigureAwait(false);
-        if (first.Kind == FrameKind.Closed)
+        if (first.Kind == WebSocketFrameKind.Closed)
         {
             return;
         }
 
-        if (first.Kind == FrameKind.TooBig)
+        if (first.Kind == WebSocketFrameKind.TooBig)
         {
-            await CloseQuietlyAsync(socket, CloseCodes.FrameTooBig, "trama-muy-grande", aborted).ConfigureAwait(false);
+            await WebSocketFrames.CloseQuietlyAsync(socket, CloseCodes.FrameTooBig, "trama-muy-grande", aborted).ConfigureAwait(false);
             LogClosed(logger, CloseCodes.FrameTooBig);
             return;
         }
 
-        var token = first.Kind == FrameKind.Text ? ReadAuthToken(first.Text!) : null;
+        var token = first.Kind == WebSocketFrameKind.Text ? AuthFrame.ReadToken(first.Text!) : null;
         if (token is null)
         {
-            await CloseQuietlyAsync(socket, CloseCodes.InvalidFrame, "trama-invalida", aborted).ConfigureAwait(false);
+            await WebSocketFrames.CloseQuietlyAsync(socket, CloseCodes.InvalidFrame, "trama-invalida", aborted).ConfigureAwait(false);
             LogClosed(logger, CloseCodes.InvalidFrame);
             return;
         }
@@ -75,14 +65,14 @@ public sealed partial class RealtimeSession(
         var user = await validator.ValidateAsync(token).ConfigureAwait(false);
         if (user is null)
         {
-            await CloseQuietlyAsync(socket, CloseCodes.InvalidToken, "token-invalido", aborted).ConfigureAwait(false);
+            await WebSocketFrames.CloseQuietlyAsync(socket, CloseCodes.InvalidToken, "token-invalido", aborted).ConfigureAwait(false);
             LogClosed(logger, CloseCodes.InvalidToken);
             return;
         }
 
         if (!Roles.UsesRealtimeChannel(user.Role))
         {
-            await CloseQuietlyAsync(socket, CloseCodes.RoleNotAllowed, "rol-no-admitido", aborted).ConfigureAwait(false);
+            await WebSocketFrames.CloseQuietlyAsync(socket, CloseCodes.RoleNotAllowed, "rol-no-admitido", aborted).ConfigureAwait(false);
             LogClosed(logger, CloseCodes.RoleNotAllowed);
             return;
         }
@@ -100,7 +90,7 @@ public sealed partial class RealtimeSession(
         try
         {
             var remaining = user.ExpiresAt - time.GetUtcNow();
-            var nextRead = ReadFrameAsync(socket, settings.MaxFrameBytes, aborted);
+            var nextRead = WebSocketFrames.ReadAsync(socket, settings.MaxFrameBytes, aborted);
             if (!await CompletesWithinAsync(nextRead, remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero, aborted).ConfigureAwait(false))
             {
                 await client.CloseAsync(CloseCodes.TokenExpired, "token-vencido", aborted).ConfigureAwait(false);
@@ -110,7 +100,7 @@ public sealed partial class RealtimeSession(
             }
 
             var next = await nextRead.ConfigureAwait(false);
-            if (next.Kind != FrameKind.Closed)
+            if (next.Kind != WebSocketFrameKind.Closed)
             {
                 // El contrato solo admite la trama auth: cualquier otra trama de la app es un error.
                 await client.CloseAsync(CloseCodes.InvalidFrame, "trama-invalida", aborted).ConfigureAwait(false);
@@ -154,82 +144,6 @@ public sealed partial class RealtimeSession(
         catch (Exception e) when (e is TimeoutException or WebSocketException or OperationCanceledException)
         {
             _ = read.ContinueWith(static t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
-        }
-    }
-
-    internal static string? ReadAuthToken(string text)
-    {
-        try
-        {
-            using var doc = JsonDocument.Parse(text);
-            var root = doc.RootElement;
-            if (root.ValueKind != JsonValueKind.Object || root.EnumerateObject().Count() != 2
-                || !root.TryGetProperty("type", out var type) || type.ValueKind != JsonValueKind.String || type.GetString() != "auth"
-                || !root.TryGetProperty("token", out var token) || token.ValueKind != JsonValueKind.String)
-            {
-                return null;
-            }
-
-            var value = token.GetString();
-            return string.IsNullOrWhiteSpace(value) ? null : value;
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-    }
-
-    internal static async Task CloseQuietlyAsync(WebSocket socket, int code, string reason, CancellationToken cancellationToken)
-    {
-        if (socket.State is not (WebSocketState.Open or WebSocketState.CloseReceived))
-        {
-            return;
-        }
-
-        try
-        {
-            await socket.CloseOutputAsync((WebSocketCloseStatus)code, reason, cancellationToken).ConfigureAwait(false);
-        }
-        catch (WebSocketException)
-        {
-        }
-        catch (OperationCanceledException)
-        {
-        }
-    }
-
-    private static async Task<(FrameKind Kind, string? Text)> ReadFrameAsync(WebSocket socket, int maxBytes, CancellationToken cancellationToken)
-    {
-        var buffer = ArrayPool<byte>.Shared.Rent(maxBytes + 1);
-        try
-        {
-            var total = 0;
-            while (true)
-            {
-                var result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer, total, buffer.Length - total), cancellationToken).ConfigureAwait(false);
-                if (result.MessageType == WebSocketMessageType.Close)
-                {
-                    await CloseQuietlyAsync(socket, (int)WebSocketCloseStatus.NormalClosure, string.Empty, cancellationToken).ConfigureAwait(false);
-                    return (FrameKind.Closed, null);
-                }
-
-                total += result.Count;
-                if (total > maxBytes)
-                {
-                    return (FrameKind.TooBig, null);
-                }
-
-                if (result.EndOfMessage)
-                {
-                    return result.MessageType == WebSocketMessageType.Text
-                        ? (FrameKind.Text, Encoding.UTF8.GetString(buffer, 0, total))
-                        : (FrameKind.NotText, null);
-                }
-            }
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(buffer);
         }
     }
 
