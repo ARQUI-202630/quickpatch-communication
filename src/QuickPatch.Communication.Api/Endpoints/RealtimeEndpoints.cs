@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using QuickPatch.Communication.Api.Realtime;
 using QuickPatch.Communication.Application.Abstractions;
 using QuickPatch.Communication.Application.Realtime;
+using QuickPatch.Transversal.Security;
 
 namespace QuickPatch.Communication.Api.Endpoints;
 

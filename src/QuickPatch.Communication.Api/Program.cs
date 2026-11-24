@@ -4,8 +4,12 @@ using QuickPatch.Communication.Api.Endpoints;
 using QuickPatch.Communication.Api.Http;
 using QuickPatch.Communication.Application;
 using QuickPatch.Communication.Infrastructure;
+using QuickPatch.Transversal.Http;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Logs en JSON con scopes (ADR-020): cada línea lleva su correlationId.
+builder.Logging.AddQuickPatchJsonConsole();
 
 builder.Services.AddProblemDetails(options => options.CustomizeProblemDetails = Problems.Customize);
 builder.Services.AddHealthChecks();

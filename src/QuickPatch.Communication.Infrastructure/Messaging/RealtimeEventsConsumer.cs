@@ -1,10 +1,10 @@
 using Confluent.Kafka;
 
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 using QuickPatch.Communication.Application.Events;
 using QuickPatch.Communication.Application.Realtime;
+using QuickPatch.Transversal.Messaging;
 
 namespace QuickPatch.Communication.Infrastructure.Messaging;
 
@@ -16,49 +16,25 @@ namespace QuickPatch.Communication.Infrastructure.Messaging;
 public sealed partial class RealtimeEventsConsumer(
     IConsumer<string, string> consumer,
     RealtimeNotifier notifier,
-    ILogger<RealtimeEventsConsumer> logger) : BackgroundService
+    ILogger<RealtimeEventsConsumer> logger)
+    : KafkaConsumerService(consumer, EventTypes.Consumed, logger)
 {
-    protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
-        Task.Factory.StartNew(() => ConsumeLoopAsync(stoppingToken), stoppingToken, TaskCreationOptions.LongRunning, TaskScheduler.Default).Unwrap();
-
-    private async Task ConsumeLoopAsync(CancellationToken stoppingToken)
+    // Un aviso que no llega no se reintenta: la app tiene el respaldo de consulta cada 30 s (ADR-023).
+    protected override async Task<bool> ProcessAsync(ConsumeResult<string, string> result, CancellationToken cancellationToken)
     {
-        consumer.Subscribe(EventTypes.Consumed);
+        ArgumentNullException.ThrowIfNull(result);
         try
         {
-            while (!stoppingToken.IsCancellationRequested)
-            {
-                ConsumeResult<string, string>? result;
-                try
-                {
-                    result = consumer.Consume(TimeSpan.FromSeconds(1));
-                }
-                catch (ConsumeException ex) when (!ex.Error.IsFatal)
-                {
-                    LogConsumeFailed(logger, ex.Error.Reason, ex);
-                    await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken).ConfigureAwait(false);
-                    continue;
-                }
-
-                if (result?.Message?.Value is null)
-                {
-                    continue;
-                }
-
-                // Un aviso que no llega no se reintenta: la app tiene el respaldo de consulta cada 30 s (ADR-023).
-                await notifier.HandleAsync(result.Message.Value, stoppingToken).ConfigureAwait(false);
-                consumer.Commit(result);
-            }
+            await notifier.HandleAsync(result.Message.Value, cancellationToken).ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
+            LogNotifyFailed(logger, result.Topic, ex);
         }
-        finally
-        {
-            consumer.Close();
-        }
+
+        return true;
     }
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "No se pudo leer de Kafka ({Reason}); se reintentará.")]
-    private static partial void LogConsumeFailed(ILogger logger, string reason, Exception exception);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "No se pudo avisar {Topic} por el canal en tiempo real; no se reintenta.")]
+    private static partial void LogNotifyFailed(ILogger logger, string topic, Exception exception);
 }

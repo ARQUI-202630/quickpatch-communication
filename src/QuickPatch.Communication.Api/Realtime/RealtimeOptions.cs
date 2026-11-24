@@ -15,19 +15,6 @@ public sealed class RealtimeOptions
     public int KeepAliveSeconds { get; set; } = 30;
 }
 
-/// <summary>Configuración del JWT (sección <c>Jwt</c>). Identity firma con RS256; aquí solo está la llave pública (ADR-018).</summary>
-public sealed class JwtSettings
-{
-    public const string Section = "Jwt";
-
-    public string Issuer { get; set; } = "quickpatch-identity";
-
-    public string Audience { get; set; } = "quickpatch";
-
-    /// <summary>Llave pública RSA en PEM. Sin llave, ningún token es válido (falla cerrado).</summary>
-    public string PublicKeyPem { get; set; } = string.Empty;
-}
-
 /// <summary>Códigos de cierre del contrato (<c>x-close-codes</c>).</summary>
 public static class CloseCodes
 {
