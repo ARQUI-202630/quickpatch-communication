@@ -15,6 +15,7 @@ namespace QuickPatch.Communication.UnitTests.Architecture;
 /// </summary>
 public sealed class ArchitectureTests
 {
+    private const string DomainNs = "QuickPatch.Communication.Domain";
     private const string ApiNs = "QuickPatch.Communication.Api";
     private const string ApplicationNs = "QuickPatch.Communication.Application";
     private const string InfrastructureNs = "QuickPatch.Communication.Infrastructure";
@@ -64,6 +65,22 @@ public sealed class ArchitectureTests
     public void Realtime_LaConexionNoDependeDeLaSesion() =>
         AssertOk(Types.InAssembly(Api).That().HaveName("WebSocketClient")
             .ShouldNot().HaveDependencyOnAny(ApiNs + ".Realtime.RealtimeSession").GetResult());
+
+    [Fact]
+    public void NingunaCapa_TieneCiclosEntreSusCarpetas()
+    {
+        var cycles = new[] { (Domain, DomainNs), (Application, ApplicationNs), (Infrastructure, InfrastructureNs), (Api, ApiNs) }
+            .SelectMany(layer => LayerRules.FolderCycles(layer.Item1, layer.Item2))
+            .ToList();
+        Assert.True(cycles.Count == 0, "Viola SDD 10.3.2 (ciclo entre carpetas): " + string.Join("; ", cycles));
+    }
+
+    [Fact]
+    public void Application_UnCasoDeUsoPorArchivo()
+    {
+        var files = LayerRules.FilesWithSeveralUseCases("QuickPatch.Communication.Application");
+        Assert.True(files.Count == 0, "Viola SDD 10.3.2 (varios casos de uso en un archivo): " + string.Join("; ", files));
+    }
 
     private static void AssertOk(TestResult result) =>
         Assert.True(
